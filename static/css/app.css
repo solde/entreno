@@ -331,3 +331,9 @@ dialog[open] { animation: pop .22s var(--ease); }
 }
 @media (pointer: coarse) { :root { --ctl: 44px; } .switch { width: 56px; height: 34px; } .switch i { width: 30px; height: 30px; } .switch[aria-checked="true"] i { transform: translateX(22px); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; } }
+
+/* El menú lateral hace scroll si no cabe (el pie con tema/densidad se queda fijo abajo) */
+.sidebar { overflow: hidden; }
+.sidebar .nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 2px; -webkit-overflow-scrolling: touch; }
+.sidebar .sidebar-foot { flex: none; }
+@media (max-width: 820px) { .sidebar { height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); } }
