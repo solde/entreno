@@ -1,0 +1,24 @@
+{%- macro ic(name, cls='') -%}<svg class="ic {{ cls }}" aria-hidden="true" focusable="false"><use href="{{ base }}/static/icons.svg?v={{ v }}#i-{{ name }}"/></svg>{%- endmacro -%}
+<!doctype html>
+<html lang="{{ lang }}" data-theme="light" data-density="comfortable"{% if embed %} class="embed"{% endif %}>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="base" content="{{ base }}">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}Entrenamiento{% endblock %}</title>
+  <link rel="icon" href="{{ base }}/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ base }}/static/css/app.css?v={{ v }}">
+  <link rel="stylesheet" href="{{ base }}/static/css/ext.css?v={{ v }}">
+  <link rel="stylesheet" href="{{ base }}/static/css/training.css?v={{ v }}">
+  <script src="{{ base }}/static/js/boot.js?v={{ v }}"></script>
+  <script id="i18n-data" type="application/json">{{ i18n|tojson }}</script>
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+  <div class="bg" aria-hidden="true"><i></i><i></i><i></i></div>
+  {% block body %}{% endblock %}
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+  <script type="module" src="{{ base }}/static/js/{% block entry %}main{% endblock %}.js?v={{ v }}"></script>
+</body>
+</html>

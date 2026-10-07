@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Entrenamiento{% endblock %}
+{% block body %}
+{% set views = [('dashboard','pulse'),('routines','checks'),('train','barbell'),('exercises','search'),('chat','chat'),('settings','gear')] %}
+<a class="skip" href="#content">{{ i18n['a11y.skip'] }}</a>
+<div class="app">
+  <aside class="sidebar glass" id="sidebar" aria-label="Navegación">
+    <div class="brand">
+      <span class="brand-icon">{{ ic('barbell') }}</span>
+      <span class="brand-text"><strong>Entrenamiento</strong><small>Rutinas y progreso</small></span>
+    </div>
+    <nav class="nav" id="nav">
+      {% for id, ico in views %}<a href="#/{{ id }}" data-nav="{{ id }}">{{ ic(ico) }}<span>{{ i18n['nav.' ~ id] }}</span></a>
+      {% endfor %}
+    </nav>
+    <div class="sidebar-foot">
+      <a class="nav-btn" href="/">{{ ic('home') }}<span>{{ i18n['nav.home'] }}</span></a>
+      <button class="nav-btn" type="button" id="btn-density">{{ ic('density') }}<span>{{ i18n['density.toggle'] }}</span></button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar glass">
+      <button class="icon-btn only-narrow" type="button" id="btn-sidebar" aria-label="{{ i18n['nav.menu'] }}">{{ ic('sidebar') }}</button>
+      <button class="search-btn" type="button" id="btn-palette">{{ ic('search') }}<span>{{ i18n['palette.open'] }}</span><kbd id="kbd-hint">⌘K</kbd></button>
+      <span class="spacer"></span>
+      <div class="seg theme-seg" role="radiogroup" aria-label="{{ i18n['theme.label'] }}" id="theme-seg">
+        <button type="button" role="radio" data-theme-pref="auto" aria-label="{{ i18n['theme.auto'] }}" title="{{ i18n['theme.auto'] }}">{{ ic('auto') }}</button>
+        <button type="button" role="radio" data-theme-pref="light" aria-label="{{ i18n['theme.light'] }}" title="{{ i18n['theme.light'] }}">{{ ic('sun') }}</button>
+        <button type="button" role="radio" data-theme-pref="dark" aria-label="{{ i18n['theme.dark'] }}" title="{{ i18n['theme.dark'] }}">{{ ic('moon') }}</button>
+      </div>
+      <button class="icon-btn" type="button" id="btn-logout" aria-label="{{ i18n['auth.logout'] }}" title="{{ i18n['auth.logout'] }}">{{ ic('logout') }}</button>
+    </header>
+
+    <main id="content" class="content" tabindex="-1">
+      <div class="banner err" id="banner-offline" hidden>{{ ic('fail') }}<span>{{ i18n['net.offline'] }}</span></div>
+      <a class="banner live-banner" id="live-banner" href="#/train" hidden>{{ ic('timer') }}<span>Entrenamiento en curso — <b id="live-clock">0:00</b></span><em>Volver</em></a>
+      {% for id, ico in views %}
+      <section class="view" id="view-{{ id }}" data-view="{{ id }}" hidden aria-labelledby="h-{{ id }}"></section>
+      {% endfor %}
+    </main>
+  </div>
+
+  <nav class="tabbar glass" id="tabbar" aria-label="Navegación">
+    {% for id, ico in views if id != 'settings' %}<a href="#/{{ id }}" data-nav="{{ id }}">{{ ic(ico) }}<span>{{ i18n['nav.' ~ id] }}</span></a>
+    {% endfor %}
+  </nav>
+</div>
+<div class="scrim" id="scrim" hidden></div>
+<dialog id="dialog" class="glass dialog"></dialog>
+<dialog id="palette" class="glass palette" aria-label="{{ i18n['palette.title'] }}"></dialog>
+{% endblock %}
