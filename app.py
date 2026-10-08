@@ -150,9 +150,10 @@ def headers(resp):
     if request.path.startswith("/media/"):
         resp.headers["Content-Security-Policy"] = "sandbox; default-src 'none'; img-src 'self'; media-src 'self'"
     else:
+        anc = "'self'" if framed else "'none'"
         resp.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; "
-            f"connect-src 'self'; font-src 'self'; frame-ancestors {"'self'" if framed else "'none'"}; base-uri 'none'; form-action 'self'")
+            f"connect-src 'self'; font-src 'self'; frame-ancestors {anc}; base-uri 'none'; form-action 'self'")
     if request.path.startswith(("/api/", "/agent/")) or request.path == "/":
         resp.headers["Cache-Control"] = "no-store"
     return resp
