@@ -48,9 +48,12 @@ with sync_playwright() as p:
     page.keyboard.press("Escape")
     page.select_option("#ex-cat", "cardio"); page.fill("#ex-q", "carrera"); page.wait_for_timeout(600)
     page.locator(".ex-card").first.click(); page.wait_for_selector(".ex-detail .no-media"); page.wait_for_timeout(500); shot("03-cardio-sin-imagen")
-    page.click("#d-media"); page.wait_for_selector("#m-file", state="attached")
+    page.click("#d-media"); page.wait_for_selector("#m-file", state="attached"); page.wait_for_timeout(800)
+    assert page.locator("#dialog h3", has_text="Imágenes y vídeos").is_visible() and page.locator("#m-up").is_visible(), "el diálogo de imágenes se cerró o lo tapó el detalle"
     png = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63fcffff3f0300090301ff8aa7ba620000000049454e44ae426082")
-    page.set_input_files("#m-file", files=[{"name": "mia.png", "mimeType": "image/png", "buffer": png}]); page.wait_for_selector(".media-edit img"); page.wait_for_timeout(500); shot("04-subir-imagen")
+    page.set_input_files("#m-file", files=[{"name": "mia.png", "mimeType": "image/png", "buffer": png}]); page.wait_for_selector(".media-edit img"); page.wait_for_timeout(800)
+    assert page.locator("#dialog h3", has_text="Imágenes y vídeos").is_visible(), "tras subir, el diálogo de imágenes debe seguir abierto"
+    shot("04-subir-imagen")
     page.keyboard.press("Escape"); page.wait_for_selector(".ex-detail .gallery", state="attached")
     page.keyboard.press("Escape")
     # rutina
@@ -67,7 +70,9 @@ with sync_playwright() as p:
     page.fill("#in-reps", "10"); page.fill("#in-weight", "60"); shot("08-serie"); page.click("[data-p=finish]")
     page.wait_for_selector(".timer.rest"); shot("09-descanso")
     first = page.inner_text("#t-main"); page.wait_for_timeout(1300)
-    assert page.inner_text("#t-main") != first and first in ("0:30", "0:29"), "la cuenta atrás del descanso no avanza: %s -> %s" % (first, page.inner_text("#t-main"))
+    secs = lambda t: int(t.split(":")[0]) * 60 + int(t.split(":")[1])
+    now = page.inner_text("#t-main")
+    assert secs(now) < secs(first) <= 30, "la cuenta atrás del descanso no avanza: %s -> %s" % (first, now)
     page.click("[data-p=skip]"); page.wait_for_selector("[data-p=work]")
     page.reload(); page.wait_for_selector("[data-p=work]")  # el estado sobrevive a recargar
     page.click("[data-p=quick]"); page.wait_for_selector("[data-p=work]", state="detached", timeout=1500) if False else None

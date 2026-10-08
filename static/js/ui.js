@@ -35,12 +35,17 @@ export function toast({ text, kind = "info", undo = null, timeout = 6000 }) {
 
 export function openDialog(html, { onClose, cls = "" } = {}) {
   const d = document.getElementById("dialog");
+  // Un diálogo que sustituye a otro (cerrar + abrir seguidos) recibe el evento "close" del anterior con retraso:
+  // solo se atiende un cierre real, es decir, con el diálogo ya cerrado.
+  if (d._onClose) { d.removeEventListener("close", d._onClose); d._onClose = null; }
   d.className = `glass dialog ${cls}`;
   d.innerHTML = html;
   const close = () => { if (d.open) d.close(); };
   d.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", close));
-  d.addEventListener("click", (e) => { if (e.target === d) close(); }, { once: true });
-  d.addEventListener("close", () => onClose && onClose(), { once: true });
+  d.onclick = (e) => { if (e.target === d) close(); };
+  const handler = () => { if (d.open) return; d.removeEventListener("close", handler); d._onClose = null; if (onClose) onClose(); };
+  d._onClose = handler;
+  d.addEventListener("close", handler);
   if (!d.open) d.showModal();
   return { el: d, close };
 }
