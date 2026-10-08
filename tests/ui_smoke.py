@@ -30,6 +30,10 @@ with sync_playwright() as p:
     page = ctx.new_page()
     page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
     page.on("pageerror", lambda e: errors.append(str(e)))
+    # Detrás del portal solo llegan las rutas bajo /entreno: cualquier recurso pedido fuera del prefijo daría 404 en producción
+    from urllib.parse import urlparse
+    page.on("request", lambda r: errors.append("recurso fuera del prefijo /entreno: " + r.url) if urlparse(r.url).path.startswith(("/static", "/media", "/api")) else None)
+    page.on("response", lambda r: errors.append("respuesta %s: %s" % (r.status, r.url)) if r.status >= 400 and "favicon" not in r.url else None)
     def shot(name): page.screenshot(path=f"{OUT}/{name}.png")
     def api(method, path, **kw):
         return ctx.request.fetch(BASE.rstrip("/") + path, method=method, headers={"X-CSRF-Token": "csrf", "Origin": "http://127.0.0.1:18099"}, **kw)
@@ -39,6 +43,8 @@ with sync_playwright() as p:
     page.goto(BASE + "#/exercises"); page.wait_for_selector(".ex-card"); page.fill("#ex-q", "bench press"); page.wait_for_timeout(600)
     assert page.locator(".ex-card").count() > 3, "búsqueda sin resultados"
     page.locator(".ex-card").first.click(); page.wait_for_selector(".ex-detail .media.anim img.f1"); page.wait_for_timeout(500); shot("02-ejercicio")
+    assert page.evaluate("[...document.querySelectorAll('.ex-card img')].every(i => i.complete && i.naturalWidth > 0)"), "hay miniaturas rotas"
+    assert page.evaluate("[...document.querySelectorAll('.ex-detail .media img')].every(i => i.complete && i.naturalWidth > 0)"), "imagen del ejercicio rota"
     page.keyboard.press("Escape")
     page.select_option("#ex-cat", "cardio"); page.fill("#ex-q", "carrera"); page.wait_for_timeout(600)
     page.locator(".ex-card").first.click(); page.wait_for_selector(".ex-detail .no-media"); page.wait_for_timeout(500); shot("03-cardio-sin-imagen")

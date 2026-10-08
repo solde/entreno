@@ -1,6 +1,7 @@
 import { get, put, post, upload } from "../api.js";
 import { esc, icon } from "../fmt.js";
 import { toast, confirmDialog, setBusy } from "../ui.js";
+import { u } from "../base.js";
 
 const root = () => document.getElementById("view-settings");
 let s = null;
@@ -23,7 +24,7 @@ function draw() {
       <div class="fld"><label for="a-style">Estilo de progresión</label>${sel("a-style", s.adjust_style, [["conservative", "Conservador"], ["normal", "Normal"], ["aggressive", "Agresivo"]])}</div></div></div>
     <div class="glass card"><h3>Durante el entrenamiento</h3><div class="stack">${tog("w-sound", s.sound === "1", "Sonido al acabar los descansos y las series")}${tog("w-vib", s.vibrate === "1", "Vibración (móvil)")}${tog("w-lock", s.wake_lock === "1", "Mantener la pantalla encendida")}</div></div>
     <div class="glass card"><h3>Copia de seguridad: exportar e importar</h3><p class="muted small">Exporta tus rutinas, entrenamientos, ejercicios propios y ajustes en un archivo JSON, y vuelve a importarlo cuando quieras (en este u otro portal).</p>
-      <div class="dialog-actions wrap"><a class="btn" href="/api/export" download>${icon("download")}Exportar todo (JSON)</a><a class="btn" href="/api/export?media=1" download>${icon("download")}Exportar con mis imágenes y vídeos</a><a class="btn" href="/api/export/sessions.csv" download>${icon("download")}Entrenamientos (CSV)</a></div>
+      <div class="dialog-actions wrap"><a class="btn" href="${u("/api/export")}" download>${icon("download")}Exportar todo (JSON)</a><a class="btn" href="${u("/api/export?media=1")}" download>${icon("download")}Exportar con mis imágenes y vídeos</a><a class="btn" href="${u("/api/export/sessions.csv")}" download>${icon("download")}Entrenamientos (CSV)</a></div>
       <hr><div class="fld"><label for="im-file">Importar un archivo exportado</label><input class="inp" type="file" id="im-file" accept="application/json,.json"></div>
       <div class="fld"><label for="im-mode">Cómo importar</label>${sel("im-mode", "merge", [["merge", "Combinar (añade y actualiza; no borra nada)"], ["replace", "Reemplazar (borra mis rutinas, entrenamientos y ejercicios propios)"]])}</div>
       <button class="btn" type="button" id="im-go">${icon("upload")}Importar</button></div>

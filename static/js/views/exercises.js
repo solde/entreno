@@ -6,6 +6,7 @@ import { CAT, MUSCLE, EQUIP, LEVEL, TRACK, lab, exName } from "../labels.js";
 import { ytSearch, isoDay, num, mmss } from "../util.js";
 import { pickRoutine } from "./routines.js";
 import { lineChart } from "../charts.js";
+import { u } from "../base.js";
 
 const root = () => document.getElementById("view-exercises");
 let meta = null, items = [], total = 0, loading = false, timer = null;
@@ -96,7 +97,7 @@ function mediaDialog(e, back) {
   const own = (e.media || []).filter((m) => m.own);
   const { el } = openDialog(`<h3>Imágenes y vídeos · ${esc(exName(e))}</h3>
     <p class="muted small">${own.length ? "Se muestran los tuyos en lugar de los de la biblioteca." : e.media.length ? "Ahora se muestran los de la biblioteca. Sube los tuyos para sustituirlos." : "Este ejercicio aún no tiene imagen ni vídeo."} JPG, PNG, WebP, GIF (máx. 8 MB) o MP4/WebM (máx. 30 MB), hasta 8.</p>
-    <div class="media-edit">${own.map((m) => `<div class="me">${m.kind === "video" ? `<video src="${esc(m.url)}" controls preload="metadata" playsinline></video>` : `<img src="${esc(m.url)}" alt="">`}<button class="icon-btn sm danger" type="button" data-rm="${esc(m.file)}" aria-label="Quitar">${icon("trash")}</button></div>`).join("") || (e.media.length ? e.media.map((m) => `<div class="me"><img src="${esc(m.url)}" alt=""></div>`).join("") : "")}</div>
+    <div class="media-edit">${own.map((m) => `<div class="me">${m.kind === "video" ? `<video src="${esc(u(m.url))}" controls preload="metadata" playsinline></video>` : `<img src="${esc(u(m.url))}" alt="">`}<button class="icon-btn sm danger" type="button" data-rm="${esc(m.file)}" aria-label="Quitar">${icon("trash")}</button></div>`).join("") || (e.media.length ? e.media.map((m) => `<div class="me"><img src="${esc(u(m.url))}" alt=""></div>`).join("") : "")}</div>
     <input type="file" id="m-file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" multiple hidden>
     <div class="dialog-actions wrap"><button class="btn primary" type="button" id="m-up">${icon("upload")}Subir imágenes o vídeos</button>
       <button class="btn" data-close type="button">Cerrar</button></div><div class="bar" id="m-bar" hidden><i></i></div>`, { cls: "wide", onClose: back });
