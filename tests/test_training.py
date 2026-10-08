@@ -236,3 +236,11 @@ def test_limits_and_origin(me):
     assert me.post("/api/routines", json={"name": "a", "items": []}, headers={"Origin": "https://evil.example"}).status_code == 403
     me.csrf = "otro"
     assert me.post("/api/routines", json={"name": "a", "items": []}, headers={"X-CSRF-Token": "mal"}).status_code == 403
+
+
+def test_embed_headers_allow_same_origin_frames(me):
+    emb = me.get("/", query_string={"embed": "1"})
+    csp = emb.headers["Content-Security-Policy"]
+    assert "frame-ancestors 'self';" in csp and emb.headers["X-Frame-Options"] == "SAMEORIGIN"   # sin comillas el navegador lo trata como un host y bloquea el iframe
+    plain = me.get("/")
+    assert "frame-ancestors 'none';" in plain.headers["Content-Security-Policy"] and plain.headers["X-Frame-Options"] == "DENY"
