@@ -35,7 +35,9 @@ POLL_WAIT = 25
 FLUSH_EVERY = 0.4
 MCP_PREFIX = "mcp__training__"
 READ_TOOLS = ("exercise_search", "exercise_get", "routine_list", "routine_get", "sessions_list", "session_get", "stats_get", "progress_get", "profile_get")
-WRITE_TOOLS = ("routine_create", "routine_update", "routine_restore", "routine_archive", "exercise_create")
+WRITE_TOOLS = ("routine_create", "routine_update", "routine_restore", "routine_archive", "exercise_create",
+               "food_create", "recipe_save", "plan_set_days", "plan_add_entry", "plan_clear", "plan_restore")
+READ_TOOLS += ("nutrition_profile", "food_search", "recipe_list", "recipe_get", "plan_get", "plan_log")
 ALLOWED = [MCP_PREFIX + t for t in READ_TOOLS + WRITE_TOOLS]
 SETTINGS = json.dumps({"permissions": {"allow": ALLOWED}})
 
@@ -86,15 +88,19 @@ def post_retry(path, body, what):
     return False
 
 
-def build_system_prompt(name, extra=None):
+def build_system_prompt(name, extra=None, profile_path="/agent/profile"):
     with open(os.path.join(HERE, "prompt", name), encoding="utf-8") as f:
         tpl = f.read()
     profile = "(no disponible)"
     try:
-        _, ctx = api("GET", "/agent/profile")
+        _, ctx = api("GET", profile_path)
         s = ctx.get("settings", {})
-        profile = "\n".join("- %s: %s" % (k, v) for k, v in (("Objetivo", s.get("goal")), ("Experiencia", s.get("experience")), ("Días por semana", s.get("days_per_week")), ("Material", s.get("equipment")),
-                                                           ("Lesiones/limitaciones", s.get("injuries")), ("Unidad de peso", s.get("units")), ("Estilo de progresión", s.get("adjust_style")), ("Notas", s.get("notes"))) if v)
+        pairs = (("Objetivo", s.get("goal")), ("Experiencia", s.get("experience")), ("Días por semana", s.get("days_per_week")), ("Material", s.get("equipment")),
+                 ("Lesiones/limitaciones", s.get("injuries")), ("Unidad de peso", s.get("units")), ("Estilo de progresión", s.get("adjust_style")), ("Notas", s.get("notes")),
+                 ("Objetivo kcal/día", s.get("n_kcal")), ("Proteína g/día", s.get("n_protein")), ("Hidratos g/día", s.get("n_carbs")), ("Grasa g/día", s.get("n_fat")), ("Dieta", s.get("n_diet")),
+                 ("Alergias/intolerancias", s.get("n_allergies")), ("No le gustan", s.get("n_dislikes")), ("Comidas al día", s.get("n_meals")), ("Peso kg", s.get("n_weight")), ("Altura cm", s.get("n_height")),
+                 ("Edad", s.get("n_age")), ("Sexo", s.get("n_sex")), ("Actividad", s.get("n_activity")), ("Objetivo corporal", s.get("n_goal")), ("Notas de nutrición", s.get("n_notes")))
+        profile = "\n".join("- %s: %s" % (k, v) for k, v in pairs if v not in (None, ""))
         today = ctx.get("today") or date.today().isoformat()
     except Exception as e:  # noqa: BLE001
         log("perfil no disponible (%s)" % type(e).__name__)
@@ -300,6 +306,18 @@ def process_chat(turn):
     post_retry("/agent/turns/%s/done" % turn_id, {"text": text or "", "error": error}, "turno %s" % turn_id)
 
 
+def process_nplan(job):
+    jid = job["job_id"]
+    log("plan de comidas %s (%s → %s)" % (jid, job["date_from"], job["date_to"]))
+    started = time.time()
+    import uuid
+    extra = {"RANGE_FROM": job["date_from"], "RANGE_TO": job["date_to"], "INSTRUCTIONS": job.get("instructions") or "(sin indicaciones adicionales)"}
+    msg = "Planifica el menú del %s al %s." % (job["date_from"], job["date_to"])
+    text, error, rc = run_with_retry(None, msg, build_system_prompt("plan_prompt.md", extra, "/agent/nutrition/profile"), str(uuid.uuid4()), False, EVAL_TIMEOUT, EVAL_BUDGET, "nplan-%s" % jid)
+    log("plan de comidas %s: %s en %.0fs%s" % (jid, "ERROR" if error else "ok", time.time() - started, " (%s)" % error if error else ""))
+    post_retry("/agent/nplan/%s/done" % jid, {"summary": text[:3500], "error": error}, "plan de comidas %s" % jid)
+
+
 def process_eval(job):
     jid = job["job_id"]
     scope = "la rutina «%s» (id %s)" % (job.get("routine_name") or "?", job["routine_id"]) if job.get("routine_id") else "TODAS las rutinas activas"
@@ -328,7 +346,7 @@ def main():
             status, job = api("GET", "/agent/next?wait=%d" % POLL_WAIT, timeout=POLL_WAIT + 15)
             backoff = 2
             if status == 200 and job:
-                (process_eval if job.get("kind") == "eval" else process_chat)(job)
+                {"eval": process_eval, "nplan": process_nplan}.get(job.get("kind"), process_chat)(job)
         except urllib.error.HTTPError as e:
             log("app respondió %d, reintento en %ds" % (e.code, backoff))
             time.sleep(backoff)

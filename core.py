@@ -21,6 +21,9 @@ TRACKING = ("reps", "time", "cardio")
 LEVELS = ("beginner", "intermediate", "expert")
 
 
+AGENT_SEEN = {"ts": 0.0}
+
+
 class TrainError(ValueError):
     pass
 
@@ -39,9 +42,14 @@ DEFAULTS = {
     "auto_adjust": "off",          # off | after (tras cada entrenamiento) | weekly
     "adjust_style": "normal",      # conservative | normal | aggressive
     "sound": "1", "vibrate": "1", "wake_lock": "1",
+    # nutricion
+    "n_kcal": "", "n_protein": "", "n_carbs": "", "n_fat": "", "n_diet": "", "n_allergies": "", "n_dislikes": "", "n_meals": "4",
+    "n_weight": "", "n_height": "", "n_age": "", "n_sex": "", "n_activity": "moderate", "n_goal": "maintain", "n_notes": "",
 }
+NUM_SETTINGS = {"n_kcal": (500, 10000), "n_protein": (0, 600), "n_carbs": (0, 1500), "n_fat": (0, 600), "n_weight": (20, 400), "n_height": (80, 260), "n_age": (10, 110)}
 CHOICES = {"units": ("kg", "lb"), "experience": ("beginner", "intermediate", "advanced"), "auto_adjust": ("off", "after", "weekly"),
-           "adjust_style": ("conservative", "normal", "aggressive"), "sound": ("0", "1"), "vibrate": ("0", "1"), "wake_lock": ("0", "1")}
+           "adjust_style": ("conservative", "normal", "aggressive"), "sound": ("0", "1"), "vibrate": ("0", "1"), "wake_lock": ("0", "1"),
+           "n_sex": ("", "m", "f"), "n_activity": ("sedentary", "light", "moderate", "active", "very_active"), "n_goal": ("lose", "maintain", "gain"), "n_meals": ("3", "4", "5", "6")}
 
 
 def get_settings():
@@ -58,6 +66,18 @@ def put_settings(d):
             v = max(1, min(7, int(v)))
         elif k in CHOICES and str(v) not in CHOICES[k]:
             raise TrainError("valor no válido para %s" % k)
+        elif k in NUM_SETTINGS:
+            if str(v).strip() == "":
+                v = ""
+            else:
+                try:
+                    n = float(str(v).replace(",", "."))
+                except ValueError:
+                    raise TrainError("%s debe ser un número" % k) from None
+                lo, hi = NUM_SETTINGS[k]
+                if not lo <= n <= hi:
+                    raise TrainError("%s fuera de rango (%s-%s)" % (k, lo, hi))
+                v = round(n, 1)
         db.set_setting("s_" + k, str(v)[:1500])
     return get_settings()
 
@@ -627,7 +647,8 @@ def export_all(include_media=False):
         sessions.append({"uid": full["uid"], "routine_uid": ruid["uid"] if ruid else None, "routine_name": full["routine_name"], "started": full["started"], "finished": full["finished"],
                          "status": full["status"], "notes": full["notes"], "rating": full["rating"], "total_s": full["total_s"], "plan": full["plan"],
                          "sets": [{k: x[k] for k in ("position", "exercise_id", "set_no", "reps", "weight", "duration_s", "distance_m", "rpe", "rest_s", "done_at")} for x in full["sets"]]})
-    return {"app": "homelab-training", "version": 1, "exported": db.now(), "settings": get_settings(), "exercises": ex, "routines": routines, "sessions": sessions}
+    import nutri
+    return {"app": "homelab-training", "version": 1, "exported": db.now(), "settings": get_settings(), "exercises": ex, "routines": routines, "sessions": sessions, **nutri.export_part()}
 
 
 def sessions_csv():
@@ -741,6 +762,8 @@ def import_all(data, mode="merge"):
                 rep["sessions"] += 1
             except (TypeError, ValueError, KeyError, TrainError):
                 rep["skipped_sessions"] += 1
+        import nutri
+        nutri.import_part(c, data, mode, rep)
         if isinstance(data.get("settings"), dict):
             put_settings({k: v for k, v in data["settings"].items() if k in DEFAULTS})
     return rep

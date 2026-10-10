@@ -5,7 +5,7 @@
 #   vNN   tag de la imagen (por defecto v1; sube el numero si cambias el codigo)
 #
 # Orden: ejercicios con imagenes (se descargan una vez) -> namespace + pull secret -> token app<->worker -> clave de sesion
-# -> imagen -> manifests (app, acceso de Traefik privado) -> worker del host (claude -p) -> release del portal v17 (menu Entrenamiento).
+# -> imagen -> manifests (app, acceso de Traefik privado) -> worker del host (claude -p) -> release del portal v19 (menus Entrenamiento y Nutricion).
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "Ejecuta con sudo: sudo -E $0" >&2; exit 1; }
 
@@ -16,7 +16,7 @@ INFRA="${INFRA:-/home/claude/homelab-infra}"
 REG=192.168.1.224:30300/dsoldevila/homelab-training
 OWNER="$(stat -c %U "$INFRA")"
 RUN_AS="${SUDO_USER:-$OWNER}"
-PORTAL_TAG="${PORTAL_TAG:-v17}"
+PORTAL_TAG="${PORTAL_TAG:-v19}"
 
 # kubectl como quien invoca sudo; si su kubeconfig no sirve, el de k3s (root)
 if sudo -u "$RUN_AS" -E kubectl get ns >/dev/null 2>&1; then
@@ -89,7 +89,7 @@ systemctl restart training-agent
 sleep 2
 systemctl is-active training-agent
 
-step "8/8 Portal $PORTAL_TAG (menu Entrenamiento)"
+step "8/8 Portal $PORTAL_TAG (menus Entrenamiento y Nutricion)"
 CUR="$(k -n apps get deploy homelab-portal -o jsonpath='{.spec.template.spec.containers[0].image}' | sed -E 's/.*:v//')"
 WANT="${PORTAL_TAG#v}"
 if [[ "${CUR:-0}" =~ ^[0-9]+$ ]] && [ "$CUR" -ge "$WANT" ]; then
@@ -101,6 +101,6 @@ else
 fi
 
 echo
-echo "LISTO. Abre https://portal.solde.cat y el grupo «Entrenamiento» del menu (o https://portal.solde.cat/entreno/)."
+echo "LISTO. Abre https://portal.solde.cat y los grupos «Entrenamiento» y «Nutricion» del menu (o https://portal.solde.cat/entreno/)."
 echo "Las imagenes de ejercicios son de la base libre; para cardio y los que no tengan, sube las tuyas en Ejercicios > Imagenes y videos."
 echo "Luego commitea los cambios de tag en $INFRA (training/deployment.yaml, portal, gateway)."

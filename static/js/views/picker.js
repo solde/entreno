@@ -13,7 +13,7 @@ export function pickExercise({ title = "Elegir ejercicio" } = {}) {
       <input class="inp" id="pk-q" type="search" placeholder="Buscar (nombre en español o inglés)…" autocomplete="off">
       <div class="seg wrap" id="pk-cat" role="group" aria-label="Categoría"><button type="button" data-c="" aria-pressed="true">Todos</button>${Object.entries(CAT).map(([k, v]) => `<button type="button" data-c="${k}" aria-pressed="false">${v}</button>`).join("")}</div>
       <ul class="pick-list" id="pk-list"></ul><p class="muted small" id="pk-more"></p>
-      <div class="dialog-actions"><button class="btn" data-close type="button">Cancelar</button></div>`, { cls: "wide", onClose: () => resolve(chosen) });
+      <div class="dialog-actions"><button class="btn" data-close type="button">Cancelar</button></div>`, { cls: "wide", id: "dialog2", onClose: () => resolve(chosen) });
     const list = el.querySelector("#pk-list"), more = el.querySelector("#pk-more");
     const draw = () => {
       list.innerHTML = items.map((e, i) => `<li><button type="button" class="pick-item" data-i="${i}">${thumb(e)}<span class="pick-name"><b>${esc(exName(e))}</b>${e.name_es ? `<small>${esc(e.name)}</small>` : ""}<small>${esc(lab(CAT, e.category))}${e.primary[0] ? " · " + esc(lab(MUSCLE, e.primary[0])) : ""}</small></span>${icon("plus")}</button></li>`).join("") || `<li class="muted small pad">Sin resultados.</li>`;

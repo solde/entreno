@@ -17,7 +17,7 @@ def mod(tmp_path, monkeypatch):
     monkeypatch.setenv("COOKIE_SECURE", "0")
     monkeypatch.setenv("SECRET_KEY", "x" * 32)
     monkeypatch.setenv("URL_PREFIX", "/entreno")
-    for m in ("db", "core", "app"):
+    for m in ("db", "core", "nutri", "app"):
         sys.modules.pop(m, None)
     app = importlib.import_module("app")
     app.app.testing = True

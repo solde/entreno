@@ -9,13 +9,16 @@ import * as dashboard from "./views/dashboard.js";
 import * as routines from "./views/routines.js";
 import * as train from "./views/train.js";
 import * as exercises from "./views/exercises.js";
+import * as menu from "./views/menu.js";
+import * as foods from "./views/foods.js";
+import * as shopping from "./views/shopping.js";
 import * as chat from "./views/chat.js";
 import * as settings from "./views/settings.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const VIEWS = { dashboard, routines, train, exercises, chat, settings };
-const ORDER = ["dashboard", "routines", "train", "exercises", "chat", "settings"];
+const VIEWS = { dashboard, routines, train, exercises, menu, foods, shopping, chat, settings };
+const ORDER = ["dashboard", "routines", "train", "exercises", "menu", "foods", "shopping", "chat", "settings"];
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const MOD = isMac ? "⌘" : "Ctrl+";
 let current = null, live = null, liveTimer = null;
@@ -30,7 +33,8 @@ function route() {
   $$("[data-nav]").forEach((a) => (a.dataset.nav === id ? a.setAttribute("aria-current", "true") : a.removeAttribute("aria-current")));
   document.body.dataset.view = id;
   closeDrawer();
-  if (current !== id) { if (current === "train") train.stop(); current = id; window.scrollTo(0, 0); }
+  if (current !== id) { if (current === "train") train.stop();
+    if (current === "menu") menu.stop(); current = id; window.scrollTo(0, 0); }
   VIEWS[id].show();
   syncLive();
 }
@@ -62,8 +66,9 @@ async function refreshAll() { if (current) VIEWS[current].show(); }
 
 function buildCommands() {
   const g = (k) => t(`palette.g_${k}`);
-  const icons = { dashboard: "pulse", routines: "checks", train: "barbell", exercises: "search", chat: "chat", settings: "gear" };
-  const cmds = ORDER.map((id, i) => ({ group: g("go"), label: t(`nav.${id}`), icon: icons[id], hint: String(i + 1), run: () => goTo(id), keywords: "ir go" }));
+  const icons = { dashboard: "pulse", routines: "checks", train: "barbell", exercises: "search", menu: "fork-knife", foods: "book", shopping: "cart", chat: "chat", settings: "gear" };
+  const cmds = ORDER.map((id, i) => ({ group: g("go"), label: t(`nav.${id === "menu" ? "menu_food" : id}`), icon: icons[id], hint: String(i + 1), run: () => goTo(id), keywords: "ir go" }));
+  cmds.push({ group: g("actions"), label: "Ir al menú de hoy", icon: "fork-knife", run: () => goTo("menu") });
   cmds.push({ group: g("actions"), label: "Empezar un entrenamiento", icon: "play", run: () => goTo("train") });
   cmds.push({ group: g("actions"), label: "Nueva rutina", icon: "plus", run: () => { goTo("routines"); setTimeout(() => $('[data-act="new"]')?.click(), 300); } });
   cmds.push({ group: g("actions"), label: "Nueva conversación con el asistente", icon: "chat", run: () => { goTo("chat"); setTimeout(() => $("#ch-new")?.click(), 250); } });
@@ -76,7 +81,7 @@ function buildCommands() {
 }
 
 function showShortcuts() {
-  const rows = [[`${MOD}K`, t("palette.open")], ["/", t("palette.open")], ["1–6", t("shortcuts.jump")], ["T", t("shortcuts.theme")], ["D", t("density.toggle")], ["R", t("palette.refresh")], ["?", t("shortcuts.title")]];
+  const rows = [[`${MOD}K`, t("palette.open")], ["/", t("palette.open")], ["1–9", t("shortcuts.jump")], ["T", t("shortcuts.theme")], ["D", t("density.toggle")], ["R", t("palette.refresh")], ["?", t("shortcuts.title")]];
   openDialog(`<h3>${esc(t("shortcuts.title"))}</h3><dl class="shortcuts">${rows.map(([k, d]) => `<div><dt><kbd>${esc(k)}</kbd></dt><dd>${esc(d)}</dd></div>`).join("")}</dl>
     <div class="dialog-actions"><button class="btn primary" data-close type="button">${esc(t("common.done"))}</button></div>`);
 }
@@ -89,7 +94,7 @@ function initShortcuts() {
     const k = e.key;
     if (k === "/") { e.preventDefault(); openPalette(); }
     else if (k === "?") showShortcuts();
-    else if (/^[1-6]$/.test(k)) goTo(ORDER[Number(k) - 1]);
+    else if (/^[1-9]$/.test(k)) goTo(ORDER[Number(k) - 1]);
     else if (k === "t") setTheme(THEMES[(THEMES.indexOf(themePref()) + 1) % 3]);
     else if (k === "d") toggleDensity();
     else if (k === "r") refreshAll();

@@ -83,10 +83,35 @@ with sync_playwright() as p:
     assert page.inner_text(".kpis").count("1") >= 1
     # ajustes
     page.goto(BASE + "#/settings"); page.wait_for_selector("#st-save"); shot("11-ajustes")
+    # nutricion: menu en calendario (dia / semana / mes), alimentos, compra, IA
+    page.goto(BASE + "#/menu"); page.wait_for_selector(".macros"); shot("14-menu-dia")
+    page.click("[data-add=breakfast]"); page.wait_for_selector("#en-pick"); page.click("#en-pick"); page.wait_for_selector("#pf-q"); page.fill("#pf-q", "huevo entero"); page.wait_for_timeout(500)
+    page.locator("#dialog2 .pick-item").first.click(); page.wait_for_selector("#en-g"); page.fill("#en-g", "110"); page.wait_for_timeout(300)
+    assert "kcal" in page.inner_text("#en-prev"), "sin vista previa de macros"
+    page.click("#en-ok"); page.wait_for_selector(".entry"); page.wait_for_timeout(300); shot("15-menu-entrada")
+    assert "Huevo entero" in page.inner_text(".slots") and "157" in page.inner_text(".macros"), "la entrada no aparece o los totales no cuadran"
+    page.click("[data-add=lunch]"); page.click("#en-kind [data-k=text]"); page.fill("#en-label", "Menú del día"); page.fill("#en-kcal", "800"); page.fill("#en-protein", "40"); page.click("#en-ok"); page.wait_for_selector(".entry >> nth=1")
+    page.click("[data-e=done]"); page.wait_for_selector(".entry.done")
+    page.click("[data-mode=week]"); page.wait_for_selector(".wk"); page.wait_for_timeout(300); shot("16-menu-semana")
+    assert "Huevo entero" in page.inner_text(".wk") and page.locator(".wk-h").count() == 7
+    page.click("[data-mode=month]"); page.wait_for_selector(".mo"); page.wait_for_timeout(300); shot("17-menu-mes")
+    assert page.locator(".mo-c").count() == 42 and "957" in page.inner_text(".mo"), "el mes no muestra el total del día"
+    page.locator(".mo-c.today").click(); page.wait_for_selector(".slots"); assert page.locator(".entry").count() == 2
+    page.click("[data-act=ai]"); page.wait_for_selector("#ai-ok"); page.fill("#ai-i", "sin gluten"); page.click("#ai-ok"); page.wait_for_selector(".banner.info")
+    page.click("[data-act=copy]"); page.wait_for_selector("#cp-ok"); page.click("#cp-ok"); page.wait_for_selector(".entry"); page.click("[data-nav='1']"); page.wait_for_selector(".entry")
+    page.click("[data-act=restore]") if False else None
+    page.goto(BASE + "#/foods"); page.wait_for_selector(".food"); page.click("[data-tab=recipes]"); page.click("[data-act=new-recipe]"); page.wait_for_selector("#rc-name"); page.fill("#rc-name", "Bol de prueba")
+    page.click("#rc-add"); page.wait_for_selector("#pf-q"); page.fill("#pf-q", "arroz blanco"); page.wait_for_timeout(500); page.locator("#dialog2 .pick-item").first.click(); page.wait_for_selector(".ing"); page.fill("[data-g='0']", "300")
+    page.click("#rc-ok"); page.wait_for_selector("[data-recipe]"); shot("18-recetas")
+    page.goto(BASE + "#/shopping"); page.wait_for_selector(".shop, .empty"); shot("19-compra")
+    page.goto(BASE + "#/settings"); page.wait_for_selector("#n-est"); page.fill("#n-weight", "75"); page.fill("#n-height", "178"); page.fill("#n-age", "35"); page.select_option("#n-sex", "m"); page.click("#n-est")
+    assert page.input_value("#n-kcal") != "" and int(page.input_value("#n-kcal")) > 1500, "la estimación no rellena las calorías"; page.click("#st-save"); page.wait_for_timeout(500); shot("20-ajustes-nutricion")
     # móvil
     m = b.new_context(viewport={"width": 390, "height": 800}); m.add_cookies([{"name": "homelab_session", "value": cookie, "url": "http://127.0.0.1:18099/"}])
     mp = m.new_page(); mp.goto(BASE + "#/dashboard"); mp.wait_for_selector(".kpis"); mp.screenshot(path=f"{OUT}/12-movil-dashboard.png")
     mp.goto(BASE + "#/exercises"); mp.wait_for_selector(".ex-card"); mp.screenshot(path=f"{OUT}/13-movil-ejercicios.png")
+    mp.goto(BASE + "#/menu"); mp.wait_for_selector(".macros"); mp.screenshot(path=f"{OUT}/21-movil-menu.png")
+    mp.click("[data-mode=week]"); mp.wait_for_selector(".wk"); mp.screenshot(path=f"{OUT}/22-movil-semana.png")
     b.close()
 real = [e for e in errors if "favicon" not in e]
 print("errores de consola:", real or "ninguno")

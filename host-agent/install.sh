@@ -23,7 +23,7 @@ kc() {  # kubectl como quien invoca sudo, luego como claude, luego con el kubeco
 # Codigo de solo lectura para el servicio (root); solo logs/work/run son escribibles por claude.
 install -d -m 0755 "$DST" "$DST/prompt"
 install -m 0644 "$SRC/worker.py" "$SRC/training_mcp.py" "$DST/"
-install -m 0644 "$SRC/prompt/system_prompt.md" "$SRC/prompt/eval_prompt.md" "$DST/prompt/"
+install -m 0644 "$SRC/prompt/system_prompt.md" "$SRC/prompt/eval_prompt.md" "$SRC/prompt/plan_prompt.md" "$DST/prompt/"
 install -d -m 0750 -o "$RUNAS" -g "$RUNAS" "$DST/logs" "$DST/work" "$DST/run"
 install -d -m 0750 -o root -g "$RUNAS" "$ETC"
 if [ ! -f "$ETC/env" ] || grep -q CLUSTER_IP "$ETC/env"; then

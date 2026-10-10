@@ -12,6 +12,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import core
 import db
+import nutri
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -27,7 +28,7 @@ MAX_IMAGE = 8 * 2**20
 MAX_VIDEO = 30 * 2**20
 MAX_MEDIA = 8
 IMPORT_MAX = 40 * 2**20
-AGENT_SEEN = {"ts": 0.0}
+AGENT_SEEN = core.AGENT_SEEN
 TURN_STALE = 20 * 60
 
 
@@ -82,6 +83,8 @@ app.config.update(
 )
 db.init()
 core.seed()
+nutri.seed_foods()
+app.register_blueprint(nutri.bp)
 
 # ---------------------------------------------------------------- seguridad (sesion compartida con el portal)
 
@@ -595,6 +598,7 @@ def agent_next():
         AGENT_SEEN["ts"] = time.time()
         _fail_stale()
         _fail_stale_evals()
+        nutri.fail_stale_jobs()
         _maybe_weekly()
         job = None
         with db.tx() as c:
@@ -608,6 +612,11 @@ def agent_next():
                 if e:
                     c.execute("UPDATE eval_jobs SET status='running', started=? WHERE id=?", (db.now(), e["id"]))
                     job = {"kind": "eval", "job_id": e["id"], "routine_id": e["routine_id"], "routine_name": e["name"], "trigger": e["trigger"]}
+                else:
+                    p = c.execute("SELECT id, date_from, date_to, instructions FROM plan_jobs WHERE status='queued' ORDER BY id LIMIT 1").fetchone()
+                    if p:
+                        c.execute("UPDATE plan_jobs SET status='running', started=? WHERE id=?", (db.now(), p["id"]))
+                        job = {"kind": "nplan", "job_id": p["id"], "date_from": p["date_from"], "date_to": p["date_to"], "instructions": p["instructions"]}
         if job:
             return jsonify(job)
         if time.time() >= end:

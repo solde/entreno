@@ -43,5 +43,8 @@
  "nav.train": "Entrenar",
  "nav.exercises": "Ejercicios",
  "nav.chat": "Asistente",
- "nav.settings": "Ajustes"
+ "nav.settings": "Ajustes",
+ "nav.menu_food": "Menú",
+ "nav.foods": "Alimentos",
+ "nav.shopping": "Compra"
 }

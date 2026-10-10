@@ -102,3 +102,35 @@ def test_errors_are_reported_not_raised(env):
     mcp, _ = env
     text, err = tool(mcp, "routine_get", id=99999)
     assert err and "404" in text
+
+
+def test_nutrition_tools_end_to_end(env):
+    mcp, me = env
+    prof, err = tool(mcp, "nutrition_profile")
+    assert not err and "slots" in json.loads(prof)
+    arroz = json.loads(tool(mcp, "food_search", q="arroz blanco (cocido)")[0])["items"][0]
+    pollo = json.loads(tool(mcp, "food_search", q="pechuga de pollo (cocinada)")[0])["items"][0]
+    assert arroz["kcal"] == 130 and arroz["id"].startswith("f_")
+    text, err = tool(mcp, "recipe_save", name="Bol de pollo", servings=2, items=[{"food_id": arroz["id"], "grams": 300}, {"food_id": pollo["id"], "grams": 240}])
+    assert not err and "creada" in text
+    rid = json.loads(tool(mcp, "recipe_list")[0])[0]["id"]
+    assert json.loads(tool(mcp, "recipe_get", id=rid)[0])["per_serving"]["kcal"] > 200
+    days = [{"date": "2026-10-12", "entries": [{"slot": "lunch", "recipe_id": rid, "servings": 1}, {"slot": "breakfast", "food_id": arroz["id"], "grams": 100}]},
+            {"date": "2026-10-13", "entries": [{"slot": "dinner", "kind": "text", "label": "Ensalada", "kcal": 300, "protein": 10}]}]
+    text, err = tool(mcp, "plan_set_days", days=days)
+    assert err and "motivo" in text.lower()
+    text, err = tool(mcp, "plan_set_days", days=days, reason="Semana equilibrada en proteína")
+    assert not err and "2 días" in text and "deshacerlo" in text
+    got = json.loads(tool(mcp, "plan_get", **{"from": "2026-10-12", "to": "2026-10-13"})[0])
+    assert [e["slot"] for e in got["days"]["2026-10-12"]["entries"]] == ["breakfast", "lunch"] and got["days"]["2026-10-13"]["totals"]["kcal"] == 300
+    assert me.get("/api/plan", query_string={"from": "2026-10-12", "to": "2026-10-12"}).get_json()["days"]["2026-10-12"]["entries"][0]["source"] == "agent"
+    text, err = tool(mcp, "plan_add_entry", date="2026-10-14", slot="snack_pm", food_id=pollo["id"], grams=80, reason="Merienda proteica")
+    assert not err and "Añadido" in text
+    log = json.loads(tool(mcp, "plan_log")[0])
+    assert log[0]["source"] == "agent"
+    text, err = tool(mcp, "plan_restore", log_id=log[1]["id"])
+    assert not err and "Restaurado" in text
+    assert tool(mcp, "plan_set_days", days=[{"date": "2026-10-15", "entries": [{"slot": "lunch", "food_id": "nope", "grams": 5}]}], reason="Prueba inválida")[1] is True
+    assert "creado" in tool(mcp, "food_create", name="Mi barrita", kcal=380, protein=20, carbs=40, fat=14, serving_g=45)[0]
+    text, err = tool(mcp, "plan_clear", **{"from": "2026-10-12", "to": "2026-10-14", "reason": "La persona lo pidió"})
+    assert not err and "recuperables" in text

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Servidor MCP stdio del asistente de entrenamiento (solo stdlib). Lo lanza `claude -p` (ver worker.py).
 
-Es la UNICA via del modelo a los datos: cada herramienta hace una peticion fija a /agent/* de la app (token y URL llegan por el entorno que pone
+Es la UNICA via del modelo a los datos (entrenamiento Y nutricion): cada herramienta hace una peticion fija a /agent/* de la app (token y URL llegan por el entorno que pone
 el worker; el modelo nunca los ve). Lee ejercicios, rutinas, entrenamientos y estadisticas, y edita rutinas: cada edicion guarda la version anterior
 (la persona puede deshacerla desde la app). Los textos que vienen de la app (notas, nombres) son DATOS no fiables.
 """
@@ -136,6 +136,83 @@ def t_exercise_create(a):
     return "Ejercicio «%s» creado (id %s). La persona puede añadirle imágenes o vídeos desde Ejercicios." % (r["name"], r["id"])
 
 
+# ---------------------------------------------------------------- nutricion
+
+def t_nutrition_profile(a):
+    return j(call("GET", "/agent/nutrition/profile"))
+
+
+def t_food_search(a):
+    return j(call("GET", "/agent/foods", {"q": a.get("q"), "category": a.get("category"), "limit": _int(a.get("limit"), 15, 1, 40)}))
+
+
+def t_food_create(a):
+    keys = ("name", "category", "kcal", "protein", "carbs", "fat", "fiber", "serving_g", "notes")
+    r = call("POST", "/agent/foods", body={k: a.get(k) for k in keys if k in a})
+    return "Alimento «%s» creado (id %s, valores por 100 g)." % (r["name"], r["id"])
+
+
+def t_recipe_list(a):
+    return j(call("GET", "/agent/recipes", {"q": a.get("q")}))
+
+
+def t_recipe_get(a):
+    return j(call("GET", "/agent/recipes/%d" % _int(a.get("id"), 0, 0, 10**9)))
+
+
+def t_recipe_save(a):
+    body = {k: a[k] for k in ("name", "servings", "steps", "notes") if k in a}
+    if "items" in a:
+        body["items"] = [{"food_id": i.get("food_id"), "grams": i.get("grams")} for i in a["items"] if isinstance(i, dict)]
+    if a.get("id"):
+        r = call("PUT", "/agent/recipes/%d" % _int(a.get("id"), 0, 0, 10**9), body=body)
+        return "Receta «%s» actualizada (%s kcal por ración)." % (r["name"], r["per_serving"]["kcal"])
+    r = call("POST", "/agent/recipes", body=body)
+    return "Receta «%s» creada (id %d, %s kcal por ración)." % (r["name"], r["id"], r["per_serving"]["kcal"])
+
+
+def t_plan_get(a):
+    r = call("GET", "/agent/plan", {"from": a.get("from"), "to": a.get("to")})
+    for d in r["days"].values():
+        d["entries"] = [{k: e[k] for k in ("id", "slot", "name", "qty", "kcal", "protein", "carbs", "fat", "done", "notes", "source")} for e in d["entries"]]
+    return j(r)
+
+
+ENTRY_KEYS = ("slot", "kind", "food_id", "recipe_id", "grams", "servings", "label", "kcal", "protein", "carbs", "fat", "notes")
+
+
+def _entries(v):
+    if not isinstance(v, list):
+        raise ValueError("entries debe ser una lista")
+    return [{k: e.get(k) for k in ENTRY_KEYS if k in e} for e in v if isinstance(e, dict)]
+
+
+def t_plan_set_days(a):
+    days = [{"date": d.get("date"), "entries": _entries(d.get("entries") or [])} for d in (a.get("days") or []) if isinstance(d, dict)]
+    r = call("PUT", "/agent/plan/days", body={"days": days, "reason": str(a.get("reason") or "")})
+    return "Menú guardado: %d días, %d entradas. El estado anterior quedó en el historial y la persona puede deshacerlo." % (r["days"], r["entries"])
+
+
+def t_plan_add_entry(a):
+    body = {k: a.get(k) for k in ("date",) + ENTRY_KEYS + ("reason",) if k in a}
+    r = call("POST", "/agent/plan/entries", body=body)
+    return "Añadido a %s (%s): %s %s — %s kcal." % (r["date"], r["slot"], r["name"], r["qty"], r["kcal"])
+
+
+def t_plan_clear(a):
+    r = call("POST", "/agent/plan/clear", body={"from": a.get("from"), "to": a.get("to") or a.get("from"), "reason": a.get("reason") or "Días vaciados por el asistente"})
+    return "Se vaciaron %d entradas (recuperables desde el historial)." % r["deleted"]
+
+
+def t_plan_log(a):
+    return j(call("GET", "/agent/plan/log", {"limit": _int(a.get("limit"), 10, 1, 50)}))
+
+
+def t_plan_restore(a):
+    r = call("POST", "/agent/plan/log/%d/restore" % _int(a.get("log_id"), 0, 0, 10**9))
+    return "Restaurado el plan de %s a %s." % (r["date_from"], r["date_to"])
+
+
 S = lambda **p: {"type": "object", "properties": p}  # noqa: E731
 STR, INT, NUM = {"type": "string"}, {"type": "integer"}, {"type": "number"}
 ITEM = {"type": "object", "description": "Un ejercicio de la rutina", "properties": {
@@ -153,6 +230,18 @@ TOOLS = {
     "stats_get": (t_stats_get, {"description": "Estadísticas por semana (sesiones, tiempo, volumen, cardio), músculos trabajados, récords, racha, constancia y ajustes previos del asistente.", "inputSchema": S(weeks=INT)}),
     "progress_get": (t_progress_get, {"description": "Evolución de un ejercicio por día (mejor peso, mejores reps, 1RM estimado, volumen, duración).", "inputSchema": S(exercise_id=STR)}),
     "profile_get": (t_profile_get, {"description": "Perfil de la persona (objetivo, experiencia, días por semana, material, lesiones, notas, unidades, estilo de progresión) y resumen reciente.", "inputSchema": S()}),
+    "nutrition_profile": (t_nutrition_profile, {"description": "Perfil nutricional de la persona: objetivos diarios (kcal, proteína, hidratos, grasa), dieta, alergias, alimentos que no le gustan, comidas al día, peso/altura/edad, actividad y objetivo.", "inputSchema": S()}),
+    "food_search": (t_food_search, {"description": "Busca alimentos de la base (valores por 100 g: kcal, proteína, hidratos, grasa) por nombre en español. Usa SOLO ids reales para planificar.", "inputSchema": S(q=STR, category=STR, limit=INT)}),
+    "food_create": (t_food_create, {"description": "Crea un alimento propio si no existe (valores por 100 g).", "inputSchema": S(name=STR, category=STR, kcal=NUM, protein=NUM, carbs=NUM, fat=NUM, fiber=NUM, serving_g=NUM)}),
+    "recipe_list": (t_recipe_list, {"description": "Lista las recetas guardadas (macros por ración).", "inputSchema": S(q=STR)}),
+    "recipe_get": (t_recipe_get, {"description": "Receta con ingredientes, pasos y macros por ración.", "inputSchema": S(id=INT)}),
+    "recipe_save": (t_recipe_save, {"description": "Crea una receta (sin id) o actualiza una (con id). items = [{food_id, grams}] del total de la receta; servings = raciones que salen.", "inputSchema": S(id=INT, name=STR, servings=NUM, steps=STR, notes=STR, items={"type": "array", "items": {"type": "object", "properties": {"food_id": STR, "grams": NUM}, "required": ["food_id", "grams"]}})}),
+    "plan_get": (t_plan_get, {"description": "Menú entre dos fechas (AAAA-MM-DD, máx. 62 días): entradas por día y momento, totales diarios y objetivos.", "inputSchema": S(**{"from": STR, "to": STR})}),
+    "plan_set_days": (t_plan_set_days, {"description": "SUSTITUYE todas las entradas de cada día indicado (no toques días que no quieras cambiar). Cada entrada: slot (breakfast, snack_am, lunch, snack_pm, dinner, other) y food_id+grams, recipe_id+servings, o kind=text con label y macros. reason obligatorio (≥ 8 caracteres). El estado anterior se guarda y se puede deshacer.", "inputSchema": S(days={"type": "array", "items": {"type": "object", "properties": {"date": STR, "entries": {"type": "array", "items": {"type": "object", "properties": {"slot": STR, "kind": STR, "food_id": STR, "recipe_id": INT, "grams": NUM, "servings": NUM, "label": STR, "kcal": NUM, "protein": NUM, "carbs": NUM, "fat": NUM, "notes": STR}, "required": ["slot"]}}}, "required": ["date", "entries"]}}, reason=STR)}),
+    "plan_add_entry": (t_plan_add_entry, {"description": "Añade UNA entrada a un día sin tocar el resto.", "inputSchema": S(date=STR, slot=STR, kind=STR, food_id=STR, recipe_id=INT, grams=NUM, servings=NUM, label=STR, kcal=NUM, protein=NUM, carbs=NUM, fat=NUM, notes=STR, reason=STR)}),
+    "plan_clear": (t_plan_clear, {"description": "Vacía un rango de días del menú. Pídelo solo si la persona lo ha pedido. Recuperable desde el historial.", "inputSchema": S(**{"from": STR, "to": STR, "reason": STR})}),
+    "plan_log": (t_plan_log, {"description": "Historial de cambios del menú (id, fecha, quién, motivo, rango).", "inputSchema": S(limit=INT)}),
+    "plan_restore": (t_plan_restore, {"description": "Deshace un cambio del historial (log_id de plan_log).", "inputSchema": S(log_id=INT)}),
     "routine_create": (t_routine_create, {"description": "Crea una rutina nueva. Usa ids reales de exercise_search. Indica el motivo en reason.", "inputSchema": S(name=STR, notes=STR, weekdays={"type": "array", "items": INT, "description": "1=lunes … 7=domingo"}, items=ITEMS, reason=STR)}),
     "routine_update": (t_routine_update, {"description": "Edita una rutina. Para cambiar ejercicios/series/pesos envía la lista COMPLETA en items (con los cambios). reason (obligatorio, ≥ 8 caracteres) explica el cambio a la persona. La versión anterior se guarda y se puede restaurar.", "inputSchema": S(id=INT, name=STR, notes=STR, weekdays={"type": "array", "items": INT}, items=ITEMS, reason=STR)}),
     "routine_restore": (t_routine_restore, {"description": "Restaura una versión anterior de la rutina (revision_id sale de routine_get).", "inputSchema": S(id=INT, revision_id=INT)}),

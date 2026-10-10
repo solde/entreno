@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Entrenamiento{% endblock %}
 {% block body %}
-{% set views = [('dashboard','pulse'),('routines','checks'),('train','barbell'),('exercises','search'),('chat','chat'),('settings','gear')] %}
+{% set views = [('dashboard','pulse'),('routines','checks'),('train','barbell'),('exercises','search'),('menu','fork-knife'),('foods','book'),('shopping','cart'),('chat','chat'),('settings','gear')] %}
 <a class="skip" href="#content">{{ i18n['a11y.skip'] }}</a>
 <div class="app">
   <aside class="sidebar glass" id="sidebar" aria-label="Navegación">
@@ -10,7 +10,7 @@
       <span class="brand-text"><strong>Entrenamiento</strong><small>Rutinas y progreso</small></span>
     </div>
     <nav class="nav" id="nav">
-      {% for id, ico in views %}<a href="#/{{ id }}" data-nav="{{ id }}">{{ ic(ico) }}<span>{{ i18n['nav.' ~ id] }}</span></a>
+      {% for id, ico in views %}<a href="#/{{ id }}" data-nav="{{ id }}">{{ ic(ico) }}<span>{{ i18n['nav.' ~ ('menu_food' if id == 'menu' else id)] }}</span></a>
       {% endfor %}
     </nav>
     <div class="sidebar-foot">
@@ -42,11 +42,12 @@
   </div>
 
   <nav class="tabbar glass" id="tabbar" aria-label="Navegación">
-    {% for id, ico in views if id != 'settings' %}<a href="#/{{ id }}" data-nav="{{ id }}">{{ ic(ico) }}<span>{{ i18n['nav.' ~ id] }}</span></a>
+    {% for id, ico in views if id != 'settings' %}<a href="#/{{ id }}" data-nav="{{ id }}">{{ ic(ico) }}<span>{{ i18n['nav.' ~ ('menu_food' if id == 'menu' else id)] }}</span></a>
     {% endfor %}
   </nav>
 </div>
 <div class="scrim" id="scrim" hidden></div>
 <dialog id="dialog" class="glass dialog"></dialog>
+<dialog id="dialog2" class="glass dialog"></dialog>
 <dialog id="palette" class="glass palette" aria-label="{{ i18n['palette.title'] }}"></dialog>
 {% endblock %}

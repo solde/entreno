@@ -7,3 +7,7 @@ export const WEEKDAY = ["", "L", "M", "X", "J", "V", "S", "D"];
 export const WEEKDAY_LONG = ["", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
 export const lab = (map, k) => map[k] || k;
 export const exName = (e) => e.name_es || e.name;
+
+export const SLOT = { breakfast: "Desayuno", snack_am: "Media mañana", lunch: "Comida", snack_pm: "Merienda", dinner: "Cena", other: "Otros" };
+export const SLOTS = Object.keys(SLOT);
+export const ACTIVITY = { sedentary: "Sedentaria (poco o nada de ejercicio)", light: "Ligera (1-3 días/semana)", moderate: "Moderada (3-5 días/semana)", active: "Alta (6-7 días/semana)", very_active: "Muy alta (entrenos dobles o trabajo físico)" };

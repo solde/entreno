@@ -63,6 +63,35 @@ CREATE TABLE IF NOT EXISTS eval_jobs(
   created INTEGER NOT NULL, started INTEGER, finished INTEGER, summary TEXT NOT NULL DEFAULT '', error TEXT
 );
 CREATE INDEX IF NOT EXISTS ev_status ON eval_jobs(status, id);
+-- Nutricion: alimentos (valores por 100 g), recetas, plan de comidas por dia y su historial (para deshacer cambios del asistente).
+CREATE TABLE IF NOT EXISTS foods(
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'Otros', kcal REAL NOT NULL DEFAULT 0, protein REAL NOT NULL DEFAULT 0,
+  carbs REAL NOT NULL DEFAULT 0, fat REAL NOT NULL DEFAULT 0, fiber REAL NOT NULL DEFAULT 0, serving_g REAL NOT NULL DEFAULT 100, notes TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'lib', favorite INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS recipes(
+  id INTEGER PRIMARY KEY, uid TEXT NOT NULL UNIQUE, name TEXT NOT NULL, servings REAL NOT NULL DEFAULT 1, steps TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
+  archived INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recipe_items(
+  id INTEGER PRIMARY KEY, recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE, position INTEGER NOT NULL,
+  food_id TEXT NOT NULL REFERENCES foods(id), grams REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS meal_entries(
+  id INTEGER PRIMARY KEY, date TEXT NOT NULL, slot TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, kind TEXT NOT NULL DEFAULT 'text',
+  food_id TEXT, recipe_id INTEGER, grams REAL, servings REAL, label TEXT NOT NULL DEFAULT '',
+  kcal REAL NOT NULL DEFAULT 0, protein REAL NOT NULL DEFAULT 0, carbs REAL NOT NULL DEFAULT 0, fat REAL NOT NULL DEFAULT 0,
+  done INTEGER NOT NULL DEFAULT 0, notes TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT 'user', created INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS me_date ON meal_entries(date, slot, position);
+CREATE TABLE IF NOT EXISTS plan_log(
+  id INTEGER PRIMARY KEY, created INTEGER NOT NULL, source TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', date_from TEXT NOT NULL, date_to TEXT NOT NULL, snapshot TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS plan_jobs(
+  id INTEGER PRIMARY KEY, date_from TEXT NOT NULL, date_to TEXT NOT NULL, instructions TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'queued',
+  created INTEGER NOT NULL, started INTEGER, finished INTEGER, summary TEXT NOT NULL DEFAULT '', error TEXT
+);
+CREATE INDEX IF NOT EXISTS pj_status ON plan_jobs(status, id);
 """
 
 

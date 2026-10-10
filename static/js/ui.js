@@ -33,8 +33,9 @@ export function toast({ text, kind = "info", undo = null, timeout = 6000 }) {
   return close;
 }
 
-export function openDialog(html, { onClose, cls = "" } = {}) {
-  const d = document.getElementById("dialog");
+// id="dialog2": diálogo secundario para selectores abiertos desde otro diálogo (el principal no se sobrescribe)
+export function openDialog(html, { onClose, cls = "", id = "dialog" } = {}) {
+  const d = document.getElementById(id);
   // Un diálogo que sustituye a otro (cerrar + abrir seguidos) recibe el evento "close" del anterior con retraso:
   // solo se atiende un cierre real, es decir, con el diálogo ya cerrado.
   if (d._onClose) { d.removeEventListener("close", d._onClose); d._onClose = null; }
