@@ -134,3 +134,7 @@ def test_nutrition_tools_end_to_end(env):
     assert "creado" in tool(mcp, "food_create", name="Mi barrita", kcal=380, protein=20, carbs=40, fat=14, serving_g=45)[0]
     text, err = tool(mcp, "plan_clear", **{"from": "2026-10-12", "to": "2026-10-14", "reason": "La persona lo pidió"})
     assert not err and "recuperables" in text
+    text, err = tool(mcp, "cook_ideas_set", date="2026-10-16", ideas=[{"name": "Bol", "servings": 1, "ingredients": [{"food_id": arroz["id"], "grams": 100}, {"name": "Sal", "qty": "pizca"}]}])
+    assert not err and "1 ideas" in text
+    assert me.get("/api/cook", query_string={"date": "2026-10-16"}).get_json()["ideas"][0]["name"] == "Bol"
+    assert tool(mcp, "cook_ideas_set", date="2026-10-16", ideas=[])[1] is True

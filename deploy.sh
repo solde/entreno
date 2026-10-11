@@ -16,7 +16,7 @@ INFRA="${INFRA:-/home/claude/homelab-infra}"
 REG=192.168.1.224:30300/dsoldevila/homelab-training
 OWNER="$(stat -c %U "$INFRA")"
 RUN_AS="${SUDO_USER:-$OWNER}"
-PORTAL_TAG="${PORTAL_TAG:-v19}"
+PORTAL_TAG="${PORTAL_TAG:-v20}"
 
 # kubectl como quien invoca sudo; si su kubeconfig no sirve, el de k3s (root)
 if sudo -u "$RUN_AS" -E kubectl get ns >/dev/null 2>&1; then

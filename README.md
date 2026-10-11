@@ -31,7 +31,7 @@ navegador ──► portal.solde.cat/entreno (Flask + SQLite, ns training; sesi�
 
 ## Nutrición (menú diario)
 
-Grupo **Nutrición** del portal (misma app, vistas `menu`, `foods`, `shopping`; el portal lo incrusta con su propio iframe sobre `/entreno/`):
+Grupo **Nutrición** del portal (misma app, vistas `menu`, `foods`, `cook`, `shopping`; el portal lo incrusta con su propio iframe sobre `/entreno/`):
 
 - **Menú en calendario** con vistas **día / semana / mes**: por día seis momentos (desayuno, media mañana, comida, merienda, cena, otros) con alimentos (gramos), recetas (raciones) o entradas libres con
   macros; totales del día frente a tus objetivos (calorías, proteína, hidratos, grasa), marcar como hecho, copiar día o semana, vaciar y **historial con deshacer**. La semana muestra una cuadrícula
@@ -42,6 +42,7 @@ Grupo **Nutrición** del portal (misma app, vistas `menu`, `foods`, `shopping`; 
 - **Asistente conectado**: el mismo agente que las rutinas (MCP `training`) lee el perfil nutricional, alimentos, recetas, menú y entrenos, y edita el menú con `plan_set_days` (motivo obligatorio, estado
   anterior guardado → «Deshacer» en el calendario). «**Planificar con IA**» (día/semana/rango + indicaciones) encola un trabajo (`plan_jobs`, prompt `plan_prompt.md`): respeta los días que ya tienen menú tuyo,
   usa tus objetivos/dieta/alergias/gustos/entrenos y verifica los totales. Estimador de objetivos en Ajustes (Mifflin-St Jeor × actividad ± objetivo) para empezar.
+- **Cocinar** (vista `cook`): elige un día, lista sus alimentos (recetas desglosadas) y «Sugerir recetas» encola `cook_jobs` (prompt `cook_prompt.md`, herramienta `cook_ideas_set`): el asistente propone 1–3 recetas con esos alimentos (+ básicos de despensa), guardadas como `recipe_ideas` (macros por ración calculados, no son recetas aún). «Guardar en mis recetas» las convierte en receta real (solo ingredientes con alimento de la base); una nueva tanda sustituye las no guardadas. No toca el menú.
 - **Datos**: se exportan e importan con el resto (JSON: alimentos propios, recetas y menú; CSV del menú). No sustituye a un dietista; con patologías, embarazo o trastornos alimentarios, consulta a un profesional.
 
 ## Seguridad
@@ -58,7 +59,7 @@ sudo -E /home/claude/homelab-training/deploy.sh [vNN]
 ```
 
 Descarga la base de ejercicios (una vez, necesita internet y crea un venv temporal con Pillow), crea ns/secretos/token, construye la imagen, aplica los manifiestos de
-`homelab-infra/training/` (y el acceso de `traefik-private` al namespace), instala `training-agent.service` y publica el portal v19 con los grupos «Entrenamiento» y «Nutrición».
+`homelab-infra/training/` (y el acceso de `traefik-private` al namespace), instala `training-agent.service` y publica el portal v20 con los grupos «Entrenamiento» y «Nutrición».
 Después commitea el cambio de tag en `homelab-infra`.
 
 ## Piezas
@@ -69,7 +70,7 @@ Después commitea el cambio de tag en `homelab-infra`.
 | `data/exercises.json`, `static/ex/` | Base de ejercicios (generada por `tools/build_exercises.py`; las imágenes no van a git) |
 | `static/`, `templates/` | Frontend (Liquid Glass): panel, rutinas, entrenar, ejercicios, asistente, ajustes |
 | `nutri.py`, `data/foods.json` | Nutrición: alimentos, recetas, menú por días, compra, historial, trabajos del asistente, exportar/importar |
-| `host-agent/worker.py`, `training_mcp.py`, `prompt/` | Worker (chat, evaluaciones y planes de comidas), servidor MCP y prompts (`system_prompt.md`, `eval_prompt.md`, `plan_prompt.md`) |
+| `host-agent/worker.py`, `training_mcp.py`, `prompt/` | Worker (chat, evaluaciones y planes de comidas), servidor MCP y prompts (`system_prompt.md`, `eval_prompt.md`, `plan_prompt.md`, `cook_prompt.md`) |
 | `host-agent/install.sh`, `set-token.sh` | Instalación del servicio y token compartido |
 | `tests/` | pytest (`pytest -q tests --ignore=tests/ui_smoke.py`) y prueba de interfaz con Playwright (`tests/ui_smoke.py <carpeta>`) |
 

@@ -104,6 +104,20 @@ with sync_playwright() as p:
     page.click("#rc-add"); page.wait_for_selector("#pf-q"); page.fill("#pf-q", "arroz blanco"); page.wait_for_timeout(500); page.locator("#dialog2 .pick-item").first.click(); page.wait_for_selector(".ing"); page.fill("[data-g='0']", "300")
     page.click("#rc-ok"); page.wait_for_selector("[data-recipe]"); shot("18-recetas")
     page.goto(BASE + "#/shopping"); page.wait_for_selector(".shop, .empty"); shot("19-compra")
+    # cocinar: ideas de recetas con los alimentos del día
+    page.goto(BASE + "#/cook"); page.wait_for_selector("[data-act=ask]:not([disabled])"); assert page.locator("#view-cook .chip").count() >= 2, "no lista los alimentos del día"
+    page.fill("#ck-i", "rápido"); page.click("[data-act=ask]"); page.wait_for_selector("#view-cook .banner.info"); shot("23-cocinar-pendiente")
+    ag = {"X-Agent-Token": "tok"}; job = None
+    for _ in range(4):
+        job = ctx.request.fetch("http://127.0.0.1:18099/agent/next?wait=0", headers=ag).json()
+        if job.get("kind") == "cook": break
+    assert job and job["kind"] == "cook", job
+    fid = api("GET", "/api/foods?q=" + "arroz%20blanco").json()["items"][0]["id"]
+    ctx.request.fetch("http://127.0.0.1:18099/agent/cook/ideas", method="PUT", headers=ag, data={"date": job["date"], "ideas": [{"name": "Bol de arroz", "servings": 2, "minutes": 15, "steps": "1. Cuece\n2. Sirve", "ingredients": [{"food_id": fid, "grams": 200}, {"name": "Sal", "qty": "una pizca"}]}]})
+    ctx.request.fetch("http://127.0.0.1:18099/agent/cook/%d/done" % job["job_id"], method="POST", headers=ag, data={"summary": "ok"})
+    page.reload(); page.wait_for_selector("#view-cook .idea"); assert "Bol de arroz" in page.inner_text(".idea") and "kcal" in page.inner_text(".idea"); shot("24-cocinar-ideas")
+    page.click("[data-act=save]"); page.wait_for_selector(".idea .chip.ok"); page.goto(BASE + "#/foods"); page.click("[data-tab=recipes]"); page.wait_for_selector("[data-recipe]")
+    assert "Bol de arroz" in page.inner_text("#view-foods"), "la idea guardada no aparece en Recetas"
     page.goto(BASE + "#/settings"); page.wait_for_selector("#n-est"); page.fill("#n-weight", "75"); page.fill("#n-height", "178"); page.fill("#n-age", "35"); page.select_option("#n-sex", "m"); page.click("#n-est")
     assert page.input_value("#n-kcal") != "" and int(page.input_value("#n-kcal")) > 1500, "la estimación no rellena las calorías"; page.click("#st-save"); page.wait_for_timeout(500); shot("20-ajustes-nutricion")
     # móvil

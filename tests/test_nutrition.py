@@ -170,3 +170,33 @@ def test_export_import_nutrition(me):
     bad = {"app": "homelab-training", "version": 1, "foods": [{"id": "../x", "source": "custom", "name": "z"}], "plan": [{"date": "no", "slot": "lunch", "kind": "text", "label": "x"}], "recipes": [{"name": "r", "items": [{"food_id": "nope", "grams": 5}]}]}
     out = me.post("/api/import", json=bad).get_json()
     assert out["plan_entries"] == 0 and out["foods"] == 0
+
+
+def test_cook_ideas_flow(me, mod):
+    day = "2026-10-20"
+    assert me.post("/api/cook", json={"date": day}).status_code == 422   # sin menú no hay nada que cocinar
+    pollo, arroz = food(me, "pechuga de pollo (cocinada)"), food(me, "arroz blanco (cocido)")
+    entry(me, day, "lunch", kind="food", food_id=pollo["id"], grams=150)
+    entry(me, day, "dinner", kind="food", food_id=arroz["id"], grams=200)
+    d = me.get("/api/cook", query_string={"date": day}).get_json()
+    assert {i["food_id"]: i["grams"] for i in d["foods"]["items"]} == {pollo["id"]: 150, arroz["id"]: 200} and d["ideas"] == [] and d["job"] is None
+    jid = me.post("/api/cook", json={"date": day, "instructions": "rápido"}).get_json()["id"]
+    assert me.post("/api/cook", json={"date": day}).get_json()["id"] == jid
+    c = mod.app.test_client()
+    job = c.get("/agent/next?wait=0", headers=AG).get_json()
+    assert job["kind"] == "cook" and job["date"] == day and job["instructions"] == "rápido"
+    ideas = [{"name": "Pollo con arroz", "servings": 2, "minutes": 25, "steps": "1. Cocina\n2. Sirve", "ingredients": [{"food_id": pollo["id"], "grams": 150}, {"food_id": arroz["id"], "grams": 200}, {"name": "Sal", "qty": "una pizca"}]}]
+    assert c.put("/agent/cook/ideas", json={"date": day, "ideas": []}, headers=AG).status_code == 422
+    assert c.put("/agent/cook/ideas", json={"date": day, "ideas": [{"name": "X", "ingredients": [{"food_id": "nope", "grams": 5}]}]}, headers=AG).status_code == 422
+    assert c.put("/agent/cook/ideas", json={"date": day, "ideas": ideas}, headers=AG).status_code == 200
+    assert c.post("/agent/cook/%d/done" % jid, json={"summary": "1 receta"}, headers=AG).status_code == 200
+    d = me.get("/api/cook", query_string={"date": day}).get_json()
+    i = d["ideas"][0]
+    assert d["job"]["status"] == "done" and i["name"] == "Pollo con arroz" and i["per_serving"]["kcal"] > 150 and i["saved_recipe_id"] is None
+    rec = me.post("/api/cook/ideas/%d/save" % i["id"]).get_json()
+    assert rec["name"] == "Pollo con arroz" and len(rec["items"]) == 2 and rec["servings"] == 2     # la sal sin food_id no entra
+    assert me.post("/api/cook/ideas/%d/save" % i["id"]).get_json()["id"] == rec["id"]
+    # una nueva tanda conserva las ya guardadas y sustituye las demás
+    c.put("/agent/cook/ideas", json={"date": day, "ideas": [{"name": "Otra", "ingredients": [{"food_id": pollo["id"], "grams": 100}]}]}, headers=AG)
+    assert [x["name"] for x in me.get("/api/cook", query_string={"date": day}).get_json()["ideas"]] == ["Pollo con arroz", "Otra"]
+    assert me.delete("/api/cook/ideas/%d" % i["id"]).status_code == 200

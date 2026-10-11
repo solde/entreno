@@ -164,3 +164,10 @@ button.chip { cursor: pointer; }
 .ing { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; } .ing .inp { width: 90px; text-align: right; } .ing em { font-style: normal; color: var(--text-2); }
 .shop { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 4px; } .shop label { display: flex; align-items: center; gap: 10px; padding: 8px 4px; cursor: pointer; border-bottom: 1px solid var(--line); } .shop li.got b { text-decoration: line-through; opacity: .55; } .shop input { width: 20px; height: 20px; accent-color: var(--accent); }
 @media (max-width: 820px) { .tabbar { overflow-x: auto; justify-content: flex-start; scrollbar-width: none; } .tabbar::-webkit-scrollbar { display: none; } .tabbar a { flex: 1 0 64px; } .food { grid-template-columns: minmax(0, 1fr) repeat(4, 44px); gap: 4px; } .slots { grid-template-columns: 1fr; } }
+
+/* Cocinar: ideas de recetas */
+.ideas { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; margin-top: 12px; }
+.idea h4 { margin: 12px 0 4px; font-size: .85rem; color: var(--text-2); }
+.idea .steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.idea .dialog-actions { margin-top: 12px; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); gap: 4px; align-items: center; }

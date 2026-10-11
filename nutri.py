@@ -482,6 +482,114 @@ def list_jobs(limit=8):
     return db.q("SELECT id, date_from, date_to, instructions, status, created, finished, summary, error FROM plan_jobs ORDER BY id DESC LIMIT ?", (limit,))
 
 
+# ---------------------------------------------------------------- ideas de recetas (con los alimentos de un dia)
+
+def day_foods(d):
+    """Alimentos del menu de un dia (agrupando gramos) y entradas libres sin desglosar."""
+    day = pdate(d).isoformat()
+    grams, texts = {}, []
+    for r in db.q("SELECT * FROM meal_entries WHERE date=? ORDER BY position", (day,)):
+        if r["kind"] == "food" and r["food_id"]:
+            grams[r["food_id"]] = grams.get(r["food_id"], 0) + (r["grams"] or 0)
+        elif r["kind"] == "recipe" and r["recipe_id"]:
+            for it in db.q("SELECT food_id, grams FROM recipe_items WHERE recipe_id=?", (r["recipe_id"],)):
+                grams[it["food_id"]] = grams.get(it["food_id"], 0) + it["grams"] * (r["servings"] or 1) / max(1, db.one("SELECT servings FROM recipes WHERE id=?", (r["recipe_id"],))["servings"] or 1)
+        elif r["label"]:
+            texts.append(r["label"])
+    foods = {f["id"]: f for f in db.q("SELECT id, name, category FROM foods WHERE id IN (%s)" % ",".join("?" * len(grams)), list(grams))} if grams else {}
+    items = sorted(({"food_id": k, "name": foods[k]["name"], "category": foods[k]["category"], "grams": round(g)} for k, g in grams.items() if k in foods), key=lambda x: (x["category"], x["name"].lower()))
+    return {"date": day, "items": items, "unspecified": texts}
+
+
+def _idea_items(items):
+    if not isinstance(items, list) or not items or len(items) > 30:
+        raise TrainError("una idea necesita entre 1 y 30 ingredientes")
+    out = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        fid = str(it.get("food_id") or "")
+        g = num(it.get("grams"), 0, 5000, None, "gramos")
+        if fid:
+            f = db.one("SELECT name FROM foods WHERE id=?", (fid,))
+            if not f:
+                raise TrainError("el alimento %r no existe (usa food_search o food_create)" % fid)
+            if not g:
+                raise TrainError("faltan los gramos de %s" % fid)
+            out.append({"food_id": fid, "name": f["name"], "grams": g})
+        else:
+            name = str(it.get("name") or "").strip()[:60]
+            if not name:
+                raise TrainError("cada ingrediente necesita food_id o name")
+            out.append({"food_id": None, "name": name, "grams": g, "qty": str(it.get("qty") or "")[:30]})
+    return out
+
+
+def idea_public(r):
+    items = jl(r["ingredients"], [])
+    tot = {"kcal": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}
+    for it in items:
+        if it.get("food_id"):
+            f = db.one("SELECT * FROM foods WHERE id=?", (it["food_id"],))
+            if f:
+                for k in tot:
+                    tot[k] += f[k] * (it["grams"] or 0) / 100.0
+    sv = r["servings"] or 1
+    return {"id": r["id"], "date": r["date"], "name": r["name"], "servings": r["servings"], "minutes": r["minutes"], "ingredients": items, "steps": r["steps"], "notes": r["notes"],
+            "per_serving": {k: r1(v / sv) for k, v in tot.items()}, "saved_recipe_id": r["saved_recipe_id"]}
+
+
+def list_ideas(d):
+    return [idea_public(r) for r in db.q("SELECT * FROM recipe_ideas WHERE date=? ORDER BY id", (pdate(d).isoformat(),))]
+
+
+def set_ideas(d, ideas):
+    """Sustituye las ideas aun no guardadas del dia por las nuevas (las ya guardadas como receta se conservan)."""
+    day = pdate(d).isoformat()
+    if not isinstance(ideas, list) or not 1 <= len(ideas) <= 5:
+        raise TrainError("envía entre 1 y 5 ideas")
+    rows = []
+    for i in ideas:
+        name = str((i or {}).get("name") or "").strip()[:100]
+        if not name:
+            raise TrainError("cada idea necesita nombre")
+        rows.append((day, name, num(i.get("servings"), 0.25, 50, 1, "raciones"), int(num(i.get("minutes"), 1, 600, 0, "minutos")) or None,
+                     json.dumps(_idea_items(i.get("ingredients")), ensure_ascii=False), str(i.get("steps") or "")[:4000], str(i.get("notes") or "")[:500], db.now()))
+    with db.tx() as c:
+        c.execute("DELETE FROM recipe_ideas WHERE date=? AND saved_recipe_id IS NULL", (day,))
+        for r in rows:
+            c.execute("INSERT INTO recipe_ideas(date,name,servings,minutes,ingredients,steps,notes,created) VALUES(?,?,?,?,?,?,?,?)", r)
+    return len(rows)
+
+
+def save_idea(iid):
+    r = _found(db.one("SELECT * FROM recipe_ideas WHERE id=?", (iid,)), "idea")
+    if r["saved_recipe_id"]:
+        return get_recipe(r["saved_recipe_id"])
+    items = [{"food_id": i["food_id"], "grams": i["grams"]} for i in jl(r["ingredients"], []) if i.get("food_id") and i.get("grams")]
+    if not items:
+        raise TrainError("la idea no tiene ingredientes de la base de alimentos; no se puede calcular como receta")
+    rec = save_recipe({"name": r["name"], "servings": r["servings"], "steps": r["steps"], "notes": r["notes"], "items": items})
+    db.run("UPDATE recipe_ideas SET saved_recipe_id=? WHERE id=?", (rec["id"], iid))
+    return rec
+
+
+def enqueue_cook(d, instructions):
+    day = pdate(d).isoformat()
+    cur = db.one("SELECT id FROM cook_jobs WHERE status IN ('queued','running') AND date=?", (day,))
+    if cur:
+        return cur["id"]
+    if not day_foods(day)["items"] and not day_foods(day)["unspecified"]:
+        raise TrainError("ese día no tiene menú: añade alimentos primero")
+    return db.run("INSERT INTO cook_jobs(date,instructions,created) VALUES(?,?,?)", (day, str(instructions or "").strip()[:1000], db.now())).lastrowid
+
+
+def fail_stale_cook():
+    now = db.now()
+    db.run("UPDATE cook_jobs SET status='error', error='Sin agente conectado', finished=? WHERE status='queued' AND created<?", (now, now - 600))
+    db.run("UPDATE cook_jobs SET status='error', error='El agente no respondió a tiempo', finished=? WHERE status='running' AND started<?", (now, now - 1200))
+
+
 # ---------------------------------------------------------------- exportar / importar (se engancha en core.export_all / import_all)
 
 def export_part():
@@ -692,6 +800,32 @@ def api_nplan():
     return jsonify({"jobs": list_jobs(), "agent_online": _t.time() - core.AGENT_SEEN["ts"] < 60})
 
 
+@bp.route("/api/cook")
+def api_cook():
+    import time as _t
+    fail_stale_cook()
+    day = request.args.get("date", "")
+    job = db.one("SELECT id, status, summary, error, created, finished FROM cook_jobs WHERE date=? ORDER BY id DESC LIMIT 1", (pdate(day).isoformat(),))
+    return jsonify({"foods": day_foods(day), "ideas": list_ideas(day), "job": job, "agent_online": _t.time() - core.AGENT_SEEN["ts"] < 60})
+
+
+@bp.route("/api/cook", methods=["POST"])
+def api_cook_ask():
+    d = _body()
+    return jsonify({"id": enqueue_cook(d.get("date"), d.get("instructions"))}), 202
+
+
+@bp.route("/api/cook/ideas/<int:iid>/save", methods=["POST"])
+def api_idea_save(iid):
+    return jsonify(save_idea(iid)), 201
+
+
+@bp.route("/api/cook/ideas/<int:iid>", methods=["DELETE"])
+def api_idea_del(iid):
+    db.run("DELETE FROM recipe_ideas WHERE id=?", (iid,))
+    return jsonify({"ok": True})
+
+
 @bp.route("/api/export/plan.csv")
 def api_plan_csv():
     return Response("﻿" + plan_csv(request.args.get("from"), request.args.get("to")), mimetype="text/csv; charset=utf-8", headers={"Content-Disposition": 'attachment; filename="menu.csv"'})
@@ -781,4 +915,21 @@ def agent_nplan_done(jid):
     d = _body()
     err = d.get("error")
     db.run("UPDATE plan_jobs SET status=?, summary=?, error=?, finished=? WHERE id=?", ("error" if err else "done", str(d.get("summary") or "")[:4000], str(err)[:500] if err else None, db.now(), jid))
+    return jsonify({"ok": True})
+
+
+@bp.route("/agent/cook/ideas", methods=["PUT"])
+def agent_cook_ideas():
+    d = _body()
+    return jsonify({"saved": set_ideas(d.get("date"), d.get("ideas"))})
+
+
+@bp.route("/agent/cook/<int:jid>/done", methods=["POST"])
+def agent_cook_done(jid):
+    j = _found(db.one("SELECT status FROM cook_jobs WHERE id=?", (jid,)), "trabajo")
+    if j["status"] != "running":
+        abort(409, description="trabajo no activo")
+    d = _body()
+    err = d.get("error")
+    db.run("UPDATE cook_jobs SET status=?, summary=?, error=?, finished=? WHERE id=?", ("error" if err else "done", str(d.get("summary") or "")[:2000], str(err)[:500] if err else None, db.now(), jid))
     return jsonify({"ok": True})

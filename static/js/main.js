@@ -12,13 +12,14 @@ import * as exercises from "./views/exercises.js";
 import * as menu from "./views/menu.js";
 import * as foods from "./views/foods.js";
 import * as shopping from "./views/shopping.js";
+import * as cook from "./views/cook.js";
 import * as chat from "./views/chat.js";
 import * as settings from "./views/settings.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const VIEWS = { dashboard, routines, train, exercises, menu, foods, shopping, chat, settings };
-const ORDER = ["dashboard", "routines", "train", "exercises", "menu", "foods", "shopping", "chat", "settings"];
+const VIEWS = { dashboard, routines, train, exercises, menu, foods, cook, shopping, chat, settings };
+const ORDER = ["dashboard", "routines", "train", "exercises", "menu", "foods", "cook", "shopping", "chat", "settings"];
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const MOD = isMac ? "⌘" : "Ctrl+";
 let current = null, live = null, liveTimer = null;
@@ -66,7 +67,7 @@ async function refreshAll() { if (current) VIEWS[current].show(); }
 
 function buildCommands() {
   const g = (k) => t(`palette.g_${k}`);
-  const icons = { dashboard: "pulse", routines: "checks", train: "barbell", exercises: "search", menu: "fork-knife", foods: "book", shopping: "cart", chat: "chat", settings: "gear" };
+  const icons = { dashboard: "pulse", routines: "checks", train: "barbell", exercises: "search", menu: "fork-knife", foods: "book", cook: "pot", shopping: "cart", chat: "chat", settings: "gear" };
   const cmds = ORDER.map((id, i) => ({ group: g("go"), label: t(`nav.${id === "menu" ? "menu_food" : id}`), icon: icons[id], hint: String(i + 1), run: () => goTo(id), keywords: "ir go" }));
   cmds.push({ group: g("actions"), label: "Ir al menú de hoy", icon: "fork-knife", run: () => goTo("menu") });
   cmds.push({ group: g("actions"), label: "Empezar un entrenamiento", icon: "play", run: () => goTo("train") });

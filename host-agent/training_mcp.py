@@ -171,6 +171,15 @@ def t_recipe_save(a):
     return "Receta «%s» creada (id %d, %s kcal por ración)." % (r["name"], r["id"], r["per_serving"]["kcal"])
 
 
+def t_cook_ideas_set(a):
+    ideas = []
+    for i in (a.get("ideas") or []):
+        if isinstance(i, dict):
+            ideas.append({k: i.get(k) for k in ("name", "servings", "minutes", "steps", "notes")} | {"ingredients": [{k: x.get(k) for k in ("food_id", "name", "grams", "qty") if k in x} for x in (i.get("ingredients") or []) if isinstance(x, dict)]})
+    r = call("PUT", "/agent/cook/ideas", body={"date": a.get("date"), "ideas": ideas})
+    return "Guardadas %d ideas de receta para %s. La persona las verá en la sección Cocinar." % (r["saved"], a.get("date"))
+
+
 def t_plan_get(a):
     r = call("GET", "/agent/plan", {"from": a.get("from"), "to": a.get("to")})
     for d in r["days"].values():
@@ -236,6 +245,7 @@ TOOLS = {
     "recipe_list": (t_recipe_list, {"description": "Lista las recetas guardadas (macros por ración).", "inputSchema": S(q=STR)}),
     "recipe_get": (t_recipe_get, {"description": "Receta con ingredientes, pasos y macros por ración.", "inputSchema": S(id=INT)}),
     "recipe_save": (t_recipe_save, {"description": "Crea una receta (sin id) o actualiza una (con id). items = [{food_id, grams}] del total de la receta; servings = raciones que salen.", "inputSchema": S(id=INT, name=STR, servings=NUM, steps=STR, notes=STR, items={"type": "array", "items": {"type": "object", "properties": {"food_id": STR, "grams": NUM}, "required": ["food_id", "grams"]}})}),
+    "cook_ideas_set": (t_cook_ideas_set, {"description": "Guarda 1-3 ideas de receta para un día (sustituye las ideas anteriores de ese día que la persona no haya guardado). Cada idea: name, servings, minutes, steps (texto numerado), notes y ingredients [{food_id, grams}] con ids REALES de food_search; para sal, especias o aceite en cantidad libre usa {name, qty} sin food_id.", "inputSchema": S(date=STR, ideas={"type": "array", "items": {"type": "object", "properties": {"name": STR, "servings": NUM, "minutes": INT, "steps": STR, "notes": STR, "ingredients": {"type": "array", "items": {"type": "object", "properties": {"food_id": STR, "name": STR, "grams": NUM, "qty": STR}}}}, "required": ["name", "ingredients"]}})}),
     "plan_get": (t_plan_get, {"description": "Menú entre dos fechas (AAAA-MM-DD, máx. 62 días): entradas por día y momento, totales diarios y objetivos.", "inputSchema": S(**{"from": STR, "to": STR})}),
     "plan_set_days": (t_plan_set_days, {"description": "SUSTITUYE todas las entradas de cada día indicado (no toques días que no quieras cambiar). Cada entrada: slot (breakfast, snack_am, lunch, snack_pm, dinner, other) y food_id+grams, recipe_id+servings, o kind=text con label y macros. reason obligatorio (≥ 8 caracteres). El estado anterior se guarda y se puede deshacer.", "inputSchema": S(days={"type": "array", "items": {"type": "object", "properties": {"date": STR, "entries": {"type": "array", "items": {"type": "object", "properties": {"slot": STR, "kind": STR, "food_id": STR, "recipe_id": INT, "grams": NUM, "servings": NUM, "label": STR, "kcal": NUM, "protein": NUM, "carbs": NUM, "fat": NUM, "notes": STR}, "required": ["slot"]}}}, "required": ["date", "entries"]}}, reason=STR)}),
     "plan_add_entry": (t_plan_add_entry, {"description": "Añade UNA entrada a un día sin tocar el resto.", "inputSchema": S(date=STR, slot=STR, kind=STR, food_id=STR, recipe_id=INT, grams=NUM, servings=NUM, label=STR, kcal=NUM, protein=NUM, carbs=NUM, fat=NUM, notes=STR, reason=STR)}),

@@ -38,6 +38,7 @@ READ_TOOLS = ("exercise_search", "exercise_get", "routine_list", "routine_get", 
 WRITE_TOOLS = ("routine_create", "routine_update", "routine_restore", "routine_archive", "exercise_create",
                "food_create", "recipe_save", "plan_set_days", "plan_add_entry", "plan_clear", "plan_restore")
 READ_TOOLS += ("nutrition_profile", "food_search", "recipe_list", "recipe_get", "plan_get", "plan_log")
+WRITE_TOOLS += ("cook_ideas_set",)
 ALLOWED = [MCP_PREFIX + t for t in READ_TOOLS + WRITE_TOOLS]
 SETTINGS = json.dumps({"permissions": {"allow": ALLOWED}})
 
@@ -318,6 +319,18 @@ def process_nplan(job):
     post_retry("/agent/nplan/%s/done" % jid, {"summary": text[:3500], "error": error}, "plan de comidas %s" % jid)
 
 
+def process_cook(job):
+    jid = job["job_id"]
+    log("ideas de receta %s (%s)" % (jid, job["date"]))
+    started = time.time()
+    import uuid
+    extra = {"DAY": job["date"], "INSTRUCTIONS": job.get("instructions") or "(sin indicaciones adicionales)"}
+    msg = "Propón recetas con los alimentos del menú del %s." % job["date"]
+    text, error, rc = run_with_retry(None, msg, build_system_prompt("cook_prompt.md", extra, "/agent/nutrition/profile"), str(uuid.uuid4()), False, EVAL_TIMEOUT, EVAL_BUDGET, "cook-%s" % jid)
+    log("ideas de receta %s: %s en %.0fs%s" % (jid, "ERROR" if error else "ok", time.time() - started, " (%s)" % error if error else ""))
+    post_retry("/agent/cook/%s/done" % jid, {"summary": text[:1800], "error": error}, "ideas de receta %s" % jid)
+
+
 def process_eval(job):
     jid = job["job_id"]
     scope = "la rutina «%s» (id %s)" % (job.get("routine_name") or "?", job["routine_id"]) if job.get("routine_id") else "TODAS las rutinas activas"
@@ -346,7 +359,7 @@ def main():
             status, job = api("GET", "/agent/next?wait=%d" % POLL_WAIT, timeout=POLL_WAIT + 15)
             backoff = 2
             if status == 200 and job:
-                {"eval": process_eval, "nplan": process_nplan}.get(job.get("kind"), process_chat)(job)
+                {"eval": process_eval, "nplan": process_nplan, "cook": process_cook}.get(job.get("kind"), process_chat)(job)
         except urllib.error.HTTPError as e:
             log("app respondió %d, reintento en %ds" % (e.code, backoff))
             time.sleep(backoff)

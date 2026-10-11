@@ -599,6 +599,7 @@ def agent_next():
         _fail_stale()
         _fail_stale_evals()
         nutri.fail_stale_jobs()
+        nutri.fail_stale_cook()
         _maybe_weekly()
         job = None
         with db.tx() as c:
@@ -617,6 +618,11 @@ def agent_next():
                     if p:
                         c.execute("UPDATE plan_jobs SET status='running', started=? WHERE id=?", (db.now(), p["id"]))
                         job = {"kind": "nplan", "job_id": p["id"], "date_from": p["date_from"], "date_to": p["date_to"], "instructions": p["instructions"]}
+                    else:
+                        k = c.execute("SELECT id, date, instructions FROM cook_jobs WHERE status='queued' ORDER BY id LIMIT 1").fetchone()
+                        if k:
+                            c.execute("UPDATE cook_jobs SET status='running', started=? WHERE id=?", (db.now(), k["id"]))
+                            job = {"kind": "cook", "job_id": k["id"], "date": k["date"], "instructions": k["instructions"]}
         if job:
             return jsonify(job)
         if time.time() >= end:

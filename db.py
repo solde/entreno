@@ -92,6 +92,18 @@ CREATE TABLE IF NOT EXISTS plan_jobs(
   created INTEGER NOT NULL, started INTEGER, finished INTEGER, summary TEXT NOT NULL DEFAULT '', error TEXT
 );
 CREATE INDEX IF NOT EXISTS pj_status ON plan_jobs(status, id);
+-- Ideas de recetas que el asistente propone con los alimentos de un dia (no son recetas hasta que la persona las guarda).
+CREATE TABLE IF NOT EXISTS cook_jobs(
+  id INTEGER PRIMARY KEY, date TEXT NOT NULL, instructions TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'queued',
+  created INTEGER NOT NULL, started INTEGER, finished INTEGER, summary TEXT NOT NULL DEFAULT '', error TEXT
+);
+CREATE INDEX IF NOT EXISTS cj_status ON cook_jobs(status, id);
+CREATE TABLE IF NOT EXISTS recipe_ideas(
+  id INTEGER PRIMARY KEY, date TEXT NOT NULL, name TEXT NOT NULL, servings REAL NOT NULL DEFAULT 1, minutes INTEGER,
+  ingredients TEXT NOT NULL DEFAULT '[]', steps TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
+  saved_recipe_id INTEGER, created INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ri_date ON recipe_ideas(date);
 """
 
 
