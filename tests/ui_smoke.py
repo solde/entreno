@@ -118,6 +118,14 @@ with sync_playwright() as p:
     page.reload(); page.wait_for_selector("#view-cook .idea"); assert "Bol de arroz" in page.inner_text(".idea") and "kcal" in page.inner_text(".idea"); shot("24-cocinar-ideas")
     page.click("[data-act=save]"); page.wait_for_selector(".idea .chip.ok"); page.goto(BASE + "#/foods"); page.click("[data-tab=recipes]"); page.wait_for_selector("[data-recipe]")
     assert "Bol de arroz" in page.inner_text("#view-foods"), "la idea guardada no aparece en Recetas"
+    # escalar a N personas (compra, menú, receta, cocinar)
+    page.goto(BASE + "#/shopping"); page.wait_for_selector(".shop"); one = page.inner_text(".shop li >> nth=0")
+    page.click("#view-shopping [data-people-step='1']"); page.wait_for_selector("#view-shopping .shop"); assert page.input_value("#sh-people") == "2" and "para 2 personas" in page.inner_text("#view-shopping .view-head"), "la compra no escala"
+    assert page.inner_text(".shop li >> nth=0") != one, "las cantidades de la compra no cambian con las personas"
+    page.goto(BASE + "#/menu"); page.wait_for_selector(".entry"); assert page.input_value("#mn-people") == "2" and "Cantidades para 2 personas" in page.inner_text("#view-menu"), "el menú no recuerda/escala las personas"
+    page.goto(BASE + "#/foods"); page.click("[data-tab=recipes]"); page.locator("[data-recipe]").first.click(); page.wait_for_selector("#rc-scaled li"); assert "2 personas" in page.inner_text("#rc-scaled"); shot("25-receta-escalada"); page.keyboard.press("Escape")
+    page.goto(BASE + "#/cook"); page.wait_for_selector("#ck-people"); assert "para 2 personas" in page.inner_text("#view-cook .idea"), "Cocinar no escala"
+    page.evaluate("localStorage.setItem('people','1')")
     page.goto(BASE + "#/settings"); page.wait_for_selector("#n-est"); page.fill("#n-weight", "75"); page.fill("#n-height", "178"); page.fill("#n-age", "35"); page.select_option("#n-sex", "m"); page.click("#n-est")
     assert page.input_value("#n-kcal") != "" and int(page.input_value("#n-kcal")) > 1500, "la estimación no rellena las calorías"; page.click("#st-save"); page.wait_for_timeout(500); shot("20-ajustes-nutricion")
     # móvil

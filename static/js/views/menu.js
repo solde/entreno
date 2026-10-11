@@ -5,6 +5,7 @@ import { SLOT, SLOTS } from "../labels.js";
 import { num } from "../util.js";
 import { iso, parse, addDays, mondayOf, fmtLong, fmtShort, fmtWeekday, fmtMonth, rangeFor, step, today } from "../cal.js";
 import { pickFood, pickRecipe } from "./foods.js";
+import { getPeople, peopleBox, bindPeople, scaledQty, scaleNote } from "../people.js";
 
 const root = () => document.getElementById("view-menu");
 const store = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } return null; };
@@ -29,7 +30,7 @@ function totalsBars(t, targets) {
 function entryRow(e) {
   const mac = `${num(e.protein, 0)}P · ${num(e.carbs, 0)}C · ${num(e.fat, 0)}G`;
   return `<li class="entry ${e.done ? "done" : ""}" data-id="${e.id}"><button class="chk" type="button" data-e="done" data-id="${e.id}" aria-pressed="${e.done}" aria-label="Marcar como hecho">${icon(e.done ? "check" : "plus-circle")}</button>
-    <button class="e-main" type="button" data-e="edit" data-id="${e.id}"><b>${esc(e.name)}</b><small>${esc(e.qty)}${e.notes ? " · " + esc(e.notes) : ""}</small></button>
+    <button class="e-main" type="button" data-e="edit" data-id="${e.id}"><b>${esc(e.name)}</b><small>${esc(scaledQty(e, getPeople()))}${e.notes ? " · " + esc(e.notes) : ""}</small></button>
     <span class="e-mac"><span><b>${num(e.kcal, 0)}</b> kcal</span><small>${mac}</small></span>${e.source === "agent" ? `<span class="badge info" title="Añadido por el asistente">${icon("sparkle")}</span>` : ""}
     <button class="icon-btn sm danger" type="button" data-e="del" data-id="${e.id}" aria-label="Quitar">${icon("trash")}</button></li>`;
 }
@@ -88,9 +89,9 @@ function render() {
   root().innerHTML = `<header class="view-head"><div><h1 id="h-menu">${esc(title())}</h1><p class="muted">Tu menú, en calendario. El asistente puede planificarlo por ti.</p></div>
       <div class="head-actions"><div class="seg" role="group" aria-label="Vista">${[["day", "Día"], ["week", "Semana"], ["month", "Mes"]].map(([m, l]) => `<button type="button" data-mode="${m}" aria-pressed="${mode === m}">${l}</button>`).join("")}</div></div></header>
     <div class="cal-bar"><div class="cal-nav"><button class="icon-btn" type="button" data-nav="-1" aria-label="Anterior">${icon("chevron-down", "rot90")}</button><button class="btn sm" type="button" data-nav="0">Hoy</button><button class="icon-btn" type="button" data-nav="1" aria-label="Siguiente">${icon("chevron-down", "rot-90")}</button></div>
-      <div class="cal-acts"><button class="btn sm" type="button" data-act="ai">${icon("sparkle")}Planificar con IA</button><button class="btn sm" type="button" data-act="shop">${icon("cart")}Compra</button>
+      <div class="cal-acts"><button class="btn sm" type="button" data-act="ai">${icon("sparkle")}Planificar con IA</button><button class="btn sm" type="button" data-act="shop">${icon("cart")}Compra</button>${peopleBox("mn-people")}
         ${mode !== "month" ? `<button class="btn sm" type="button" data-act="copy">${icon("copy")}Copiar</button><button class="btn sm danger" type="button" data-act="clear">${icon("trash")}Vaciar</button>` : ""}</div></div>
-    ${agentBanner()}${mode === "day" ? dayView() : mode === "week" ? weekView() : monthView()}
+    ${agentBanner()}${mode === "day" ? scaleNote(getPeople()) : ""}${mode === "day" ? dayView() : mode === "week" ? weekView() : monthView()}
     ${log.length ? `<details class="glass card hist"><summary>${icon("history")}Cambios recientes del menú (${log.length})</summary><ul class="plain">${log.slice(0, 8).map((l) => `<li><span><b>${l.source === "agent" ? "Asistente" : "Tú"}</b> <small class="muted">${new Date(l.created * 1000).toLocaleString("es")} · ${esc(l.date_from)}${l.date_to !== l.date_from ? " → " + esc(l.date_to) : ""}</small><br><span class="small">${esc(l.reason)}</span></span><button class="btn sm" type="button" data-act="restore" data-id="${l.id}">${icon("rewind")}Deshacer</button></li>`).join("")}</ul></details>` : ""}`;
   return [a, b];
 }
@@ -197,6 +198,7 @@ function copyDialog() {
 
 export function init() {
   const r = root();
+  bindPeople(r, () => { if (plan) render(); });
   r.addEventListener("click", async (e) => {
     const t = e.target.closest("[data-mode],[data-nav],[data-day],[data-add],[data-e],[data-act]");
     if (!t) return;

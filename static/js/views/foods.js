@@ -2,6 +2,7 @@ import { get, post, put, patch, del } from "../api.js";
 import { esc, icon } from "../fmt.js";
 import { toast, openDialog, confirmDialog, setBusy } from "../ui.js";
 import { num, parseNum } from "../util.js";
+import { getPeople, peopleBox, bindPeople } from "../people.js";
 
 const root = () => document.getElementById("view-foods");
 let tab = "foods", foods = { items: [], total: 0, categories: [] }, recipes = [], f = { q: "", category: "", favorite: false }, timer = null;
@@ -100,14 +101,20 @@ async function recipeDialog(rid) {
   const { el } = openDialog(`<h3>${rid ? "Editar receta" : "Nueva receta"}</h3><div class="fld"><label for="rc-name">Nombre</label><input class="inp" id="rc-name" maxlength="100" value="${esc(r.name)}"></div>
     <div class="fld"><label for="rc-sv">Raciones que salen</label><input class="inp" id="rc-sv" inputmode="decimal" value="${r.servings}"></div>
     <div class="fld"><label>Ingredientes (cantidad total de la receta)</label><div id="rc-items"></div><button class="btn block" type="button" id="rc-add">${icon("plus")}Añadir ingrediente</button></div><p class="muted small" id="rc-prev"></p>
+    <div class="fld"><label for="rc-people">Escalar ingredientes</label>${peopleBox("rc-people")}<ul class="plain scaled" id="rc-scaled"></ul></div>
     <div class="fld"><label for="rc-steps">Preparación</label><textarea class="inp area" id="rc-steps" rows="4" maxlength="4000">${esc(r.steps)}</textarea></div>
     <div class="dialog-actions">${rid ? `<button class="btn danger" type="button" id="rc-del">${icon("trash")}Archivar</button>` : ""}<span class="spacer"></span><button class="btn" data-close type="button">Cancelar</button><button class="btn primary" id="rc-ok" type="button">Guardar</button></div>`, { cls: "wide" });
   const list = el.querySelector("#rc-items");
   const preview = () => {
     const sv = parseNum(el.querySelector("#rc-sv").value) || 1, tot = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
     items.forEach((it) => { const fd = foodsById[it.food_id]; if (fd) Object.keys(tot).forEach((k) => { tot[k] += (fd[k] * (parseNum(it.grams) || 0)) / 100; }); });
-    el.querySelector("#rc-prev").textContent = items.length ? `Por ración: ${num(tot.kcal / sv)} kcal · ${num(tot.protein / sv, 1)} P · ${num(tot.carbs / sv, 1)} C · ${num(tot.fat / sv, 1)} G` : "";
+    scaled(); el.querySelector("#rc-prev").textContent = items.length ? `Por ración: ${num(tot.kcal / sv)} kcal · ${num(tot.protein / sv, 1)} P · ${num(tot.carbs / sv, 1)} C · ${num(tot.fat / sv, 1)} G` : "";
   };
+  const scaled = () => {
+    const n = getPeople(), sv = parseNum(el.querySelector("#rc-sv").value) || 1, k = n / sv;
+    el.querySelector("#rc-scaled").innerHTML = items.length ? `<li class="muted small">Cantidades para ${n} ${n === 1 ? "persona" : "personas"} (la receta da ${num(sv, 2)} raciones):</li>` + items.map((it) => `<li>${esc((foodsById[it.food_id] || {}).name || it.food_id)} <b>${num((parseNum(it.grams) || 0) * k)} g</b></li>`).join("") : "";
+  };
+  bindPeople(el, scaled);
   const draw = () => { list.innerHTML = items.map((it, i) => `<div class="ing"><span class="grow">${esc((foodsById[it.food_id] || {}).name || it.food_id)}</span><input class="inp" data-g="${i}" inputmode="decimal" value="${it.grams}" aria-label="Gramos"><em>g</em><button class="icon-btn sm danger" type="button" data-rm="${i}" aria-label="Quitar">${icon("trash")}</button></div>`).join(""); preview(); };
   draw();
   el.addEventListener("input", (e) => { if (e.target.dataset.g !== undefined) items[Number(e.target.dataset.g)].grams = e.target.value; preview(); });

@@ -171,3 +171,10 @@ button.chip { cursor: pointer; }
 .idea .steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
 .idea .dialog-actions { margin-top: 12px; }
 .chip.ok { background: var(--ok-soft); color: var(--ok); gap: 4px; align-items: center; }
+
+/* Escalar a N personas */
+.people { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: 600; color: var(--text-2); }
+.people .inp { width: 64px; text-align: center; padding: 6px 4px; }
+.people .icon-btn { font-size: 1.1rem; line-height: 1; }
+.scaled { margin: 6px 0 0; }
+.scale-note { margin: 0 0 8px; }
