@@ -120,8 +120,20 @@ def conn():
     return c
 
 
+# columnas añadidas después de la primera versión (CREATE TABLE IF NOT EXISTS no las añade a una BD existente)
+COLUMNS = (
+    ("foods", "months", "TEXT NOT NULL DEFAULT ''"), ("foods", "origin", "TEXT NOT NULL DEFAULT ''"),
+    ("recipes", "months", "TEXT NOT NULL DEFAULT ''"), ("recipes", "origin", "TEXT NOT NULL DEFAULT ''"), ("recipes", "kind", "TEXT NOT NULL DEFAULT ''"),
+    ("recipes", "minutes", "INTEGER"), ("recipes", "source", "TEXT NOT NULL DEFAULT 'user'"),
+)
+
+
 def init():
-    conn().executescript(SCHEMA)
+    c = conn()
+    c.executescript(SCHEMA)
+    for table, col, decl in COLUMNS:
+        if col not in {r["name"] for r in c.execute("PRAGMA table_info(%s)" % table).fetchall()}:
+            c.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, decl))
 
 
 def q(sql, args=()):

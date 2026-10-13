@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Genera data/foods.json: alimentos habituales con valores ORIENTATIVOS por 100 g (tablas tipo USDA/BEDCA, redondeados).
 Cada fila: (nombre, categoria, kcal, proteina, hidratos, grasa, fibra, porcion_g). Las porciones son las unidades habituales (1 huevo, 1 manzana…)."""
-import json, os
+import json, os, sys
 P, L, C, V, F, N, O = "Proteínas", "Lácteos y huevos", "Cereales y tubérculos", "Verduras", "Frutas", "Frutos secos, grasas y dulces", "Otros"
 LEG = "Legumbres"
 FOODS = [
@@ -42,9 +42,16 @@ FOODS = [
  ("Tomate frito (salsa)", O, 80, 1.5, 10, 3.5, 1.5, 50), ("Café solo", O, 2, 0.1, 0, 0, 0, 50), ("Cerveza", O, 43, 0.5, 3.6, 0, 0, 330), ("Vino tinto", O, 85, 0.1, 2.6, 0, 0, 150),
 ]
 def main():
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import local_foods as lf
     out = []
     for i, (n, c, k, p, h, g, f, s) in enumerate(FOODS):
-        out.append({"id": "f_%03d" % (i + 1), "name": n, "category": c, "kcal": k, "protein": p, "carbs": h, "fat": g, "fiber": f, "serving_g": s})
+        out.append({"id": "f_%03d" % (i + 1), "name": n, "category": c, "kcal": k, "protein": p, "carbs": h, "fat": g, "fiber": f, "serving_g": s,
+                    "months": lf.months(lf.SEASON_EXISTING.get(n, "")), "origin": lf.ORIGIN_EXISTING.get(n, "")})
+    names = {x["name"] for x in out}
+    for j, (n, c, k, p, h, g, f, s, mo, org) in enumerate(lf.LOCAL):
+        assert n not in names, "duplicado: " + n
+        out.append({"id": "f_%03d" % (len(FOODS) + j + 1), "name": n, "category": c, "kcal": k, "protein": p, "carbs": h, "fat": g, "fiber": f, "serving_g": s, "months": lf.months(mo), "origin": org})
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "foods.json")
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(out, fh, ensure_ascii=False, separators=(",", ":"))

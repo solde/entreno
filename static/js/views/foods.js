@@ -5,7 +5,30 @@ import { num, parseNum } from "../util.js";
 import { getPeople, peopleBox, bindPeople } from "../people.js";
 
 const root = () => document.getElementById("view-foods");
-let tab = "foods", foods = { items: [], total: 0, categories: [] }, recipes = [], f = { q: "", category: "", favorite: false }, timer = null;
+let tab = "foods", foods = { items: [], total: 0, categories: [] }, recipes = [], f = { q: "", category: "", favorite: false, season: false, origin: "" }, rf = { season: false, origin: "" }, timer = null, season = null;
+const MN = ["", "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const ORIGIN = { cat: "Cataluña", es: "España" };
+
+/** [11,12,1,2,3] -> «nov–mar»; [] -> «todo el año» (admite el salto de año). */
+export function monthsText(ms) {
+  if (!ms || !ms.length || ms.length >= 12) return "todo el año";
+  const on = new Set(ms), out = [];
+  for (let m = 1; m <= 12; m++) {
+    if (!on.has(m) || on.has(m === 1 ? 12 : m - 1)) continue;
+    let e = m; while (on.has(e === 12 ? 1 : e + 1) && e !== m + 11) e = e === 12 ? 1 : e + 1;
+    out.push(e === m ? MN[m] : `${MN[m]}–${MN[e]}`);
+  }
+  return out.join(", ");
+}
+const tags = (x) => `${x.peak ? `<span class="chip ok">De temporada</span>` : ""}${x.origin ? `<span class="chip alt">${ORIGIN[x.origin] || "Local"}</span>` : ""}`;
+
+function seasonBanner() {
+  if (!season) return "";
+  const pick = ["Verduras", "Frutas"].flatMap((c) => (season.foods && season.foods[c]) || []).slice(0, 16);
+  return `<section class="glass card season"><h3>${icon("calendar")}${esc(season.label)} · ${esc(season.month_name)}</h3><p class="muted small">${esc(season.tips)}</p>
+    ${pick.length ? `<div class="chips">${pick.map((n) => `<span class="chip ok">${esc(n)}</span>`).join("")}</div>` : ""}</section>`;
+}
+const flt = (on, key, label) => `<button class="chip${on ? " alt" : ""}" type="button" data-flt="${key}" aria-pressed="${on}">${label}</button>`;
 
 /* ------------------------------------------------------------------ selectores (los usa el menú) */
 
@@ -34,10 +57,10 @@ export function pickFood() {
 }
 
 export async function pickRecipe() {
-  const rs = await get("/api/recipes");
+  const rs = (await get("/api/recipes")).sort((a, b) => Number(b.peak) - Number(a.peak));
   return new Promise((resolve) => {
     let chosen = null;
-    const { el } = openDialog(`<h3>Elegir receta</h3>${rs.length ? `<ul class="pick-list">${rs.map((r, i) => `<li><button type="button" class="pick-item" data-i="${i}"><span class="pick-name"><b>${esc(r.name)}</b><small>${num(r.per_serving.kcal)} kcal por ración · ${num(r.per_serving.protein, 1)} P</small></span>${icon("plus")}</button></li>`).join("")}</ul>` : `<p class="muted">Aún no tienes recetas. Créalas en Alimentos → Recetas.</p>`}
+    const { el } = openDialog(`<h3>Elegir receta</h3>${rs.length ? `<ul class="pick-list">${rs.map((r, i) => `<li><button type="button" class="pick-item" data-i="${i}"><span class="pick-name"><b>${esc(r.name)}</b><small>${num(r.per_serving.kcal)} kcal por ración · ${num(r.per_serving.protein, 1)} P${r.peak ? " · de temporada" : ""}</small></span>${icon("plus")}</button></li>`).join("")}</ul>` : `<p class="muted">Aún no tienes recetas. Créalas en Alimentos → Recetas.</p>`}
       <div class="dialog-actions"><button class="btn" data-close type="button">Cancelar</button></div>`, { id: "dialog2", onClose: () => resolve(chosen) });
     el.addEventListener("click", (e) => { const b = e.target.closest(".pick-item"); if (b) { chosen = rs[Number(b.dataset.i)]; el.close(); } });
   });
@@ -46,7 +69,7 @@ export async function pickRecipe() {
 /* ------------------------------------------------------------------ vista Alimentos / Recetas */
 
 function foodRow(x) {
-  return `<article class="glass card food" data-food="${esc(x.id)}" tabindex="0" role="button"><div class="food-main"><b>${esc(x.name)}</b><small class="muted">${esc(x.category)}${x.source === "custom" ? " · tuyo" : ""}</small></div>
+  return `<article class="glass card food" data-food="${esc(x.id)}" tabindex="0" role="button"><div class="food-main"><b>${esc(x.name)}</b><small class="muted">${esc(x.category)}${x.source === "custom" ? " · tuyo" : ""}${x.months && x.months.length ? " · " + monthsText(x.months) : ""}</small>${tags(x) ? `<div class="chips tight">${tags(x)}</div>` : ""}</div>
     <div class="food-mac"><b>${num(x.kcal)}</b><small>kcal</small></div><div class="food-mac"><b>${num(x.protein, 1)}</b><small>P</small></div><div class="food-mac"><b>${num(x.carbs, 1)}</b><small>C</small></div><div class="food-mac"><b>${num(x.fat, 1)}</b><small>G</small></div>${x.favorite ? `<span class="fav">${icon("star-fill")}</span>` : ""}</article>`;
 }
 
@@ -55,18 +78,21 @@ function render() {
     <div class="head-actions">${tab === "foods" ? `<button class="btn primary" type="button" data-act="new-food">${icon("plus")}Nuevo alimento</button>` : `<button class="btn primary" type="button" data-act="new-recipe">${icon("plus")}Nueva receta</button>`}</div></header>
     <div class="seg" role="group" aria-label="Sección"><button type="button" data-tab="foods" aria-pressed="${tab === "foods"}">Alimentos</button><button type="button" data-tab="recipes" aria-pressed="${tab === "recipes"}">Recetas</button></div>`;
   if (tab === "foods") {
-    root().innerHTML = `${head}<div class="glass card filters"><input class="inp" id="fd-q" type="search" placeholder="Buscar alimento…" value="${esc(f.q)}" autocomplete="off">
+    root().innerHTML = `${head}${seasonBanner()}<div class="glass card filters"><input class="inp" id="fd-q" type="search" placeholder="Buscar alimento…" value="${esc(f.q)}" autocomplete="off">
       <div class="filter-row"><select class="inp" id="fd-c" aria-label="Categoría"><option value="">Todas las categorías</option>${foods.categories.map((c) => `<option ${f.category === c ? "selected" : ""}>${esc(c)}</option>`).join("")}</select>
-      <label class="check"><input type="checkbox" id="fd-f" ${f.favorite ? "checked" : ""}>Solo favoritos</label><span class="muted small">${foods.total} alimentos</span></div></div>
+      <label class="check"><input type="checkbox" id="fd-f" ${f.favorite ? "checked" : ""}>Solo favoritos</label><span class="muted small">${foods.total} alimentos</span></div>
+      <div class="chips">${flt(f.season, "season", "De temporada ahora")}${flt(f.origin === "cat", "cat", "Cataluña")}${flt(f.origin === "es", "es", "España")}</div></div>
       <div class="foods" id="fd-list">${foods.items.map(foodRow).join("") || `<div class="empty">${icon("search")}<p>Sin resultados.</p></div>`}</div>${foods.items.length < foods.total ? `<div class="center"><button class="btn" type="button" data-act="more">Ver más (${foods.total - foods.items.length})</button></div>` : ""}`;
   } else {
-    root().innerHTML = `${head}<div class="routines">${recipes.map((r) => `<article class="glass card routine" data-recipe="${r.id}" tabindex="0" role="button"><h3>${esc(r.name)}</h3><p class="muted small">${num(r.servings)} raciones · ${r.n_items} ingredientes</p>
-      <div class="chips"><span class="chip">${num(r.per_serving.kcal)} kcal</span><span class="chip alt">${num(r.per_serving.protein, 1)} P</span><span class="chip">${num(r.per_serving.carbs, 1)} C</span><span class="chip">${num(r.per_serving.fat, 1)} G</span></div><p class="muted small">por ración</p></article>`).join("") || `<div class="empty">${icon("book")}<p>Aún no tienes recetas.</p></div>`}</div>`;
+    root().innerHTML = `${head}${seasonBanner()}<div class="glass card filters"><div class="chips">${flt(rf.season, "rseason", "De temporada ahora")}${flt(rf.origin === "cat", "rcat", "Cataluña")}${flt(rf.origin === "es", "res", "España")}<span class="muted small">${recipes.length} recetas</span></div></div>
+      <div class="routines">${recipes.map((r) => `<article class="glass card routine" data-recipe="${r.id}" tabindex="0" role="button"><h3>${esc(r.name)}</h3><p class="muted small">${num(r.servings)} raciones · ${r.n_items} ingredientes${r.minutes ? ` · ${r.minutes} min` : ""}${r.kind ? ` · ${esc(r.kind)}` : ""}</p>${r.months && r.months.length || r.origin ? `<div class="chips tight">${tags(r)}${r.months && r.months.length ? `<span class="chip">${monthsText(r.months)}</span>` : ""}</div>` : ""}
+      <div class="chips"><span class="chip">${num(r.per_serving.kcal)} kcal</span><span class="chip alt">${num(r.per_serving.protein, 1)} P</span><span class="chip">${num(r.per_serving.carbs, 1)} C</span><span class="chip">${num(r.per_serving.fat, 1)} G</span></div><p class="muted small">por ración</p></article>`).join("") || `<div class="empty">${icon("book")}<p>Sin recetas con estos filtros.</p></div>`}</div>`;
   }
 }
 
+const loadRecipes = async () => { recipes = await get(`/api/recipes?${rf.season ? "season=1&" : ""}${rf.origin ? "origin=" + rf.origin : ""}`); };
 async function loadFoods(more) {
-  const r = await get(`/api/foods?limit=60&offset=${more ? foods.items.length : 0}&q=${encodeURIComponent(f.q)}&category=${encodeURIComponent(f.category)}${f.favorite ? "&favorite=1" : ""}`);
+  const r = await get(`/api/foods?limit=60&offset=${more ? foods.items.length : 0}&q=${encodeURIComponent(f.q)}&category=${encodeURIComponent(f.category)}${f.favorite ? "&favorite=1" : ""}${f.season ? "&season=1" : ""}${f.origin ? "&origin=" + f.origin : ""}`);
   foods = { ...r, items: more ? foods.items.concat(r.items) : r.items };
 }
 
@@ -77,6 +103,7 @@ function foodDialog(x) {
       <div class="fld"><label for="fo-cat">Categoría</label><input class="inp" id="fo-cat" list="fo-cats" maxlength="40" value="${esc(x ? x.category : "Otros")}"><datalist id="fo-cats">${foods.categories.map((c) => `<option value="${esc(c)}">`).join("")}</datalist></div>
       <p class="muted small">Valores por 100 g</p><div class="two">${fld("fo-kcal", "kcal", x && x.kcal)}${fld("fo-p", "Proteína (g)", x && x.protein)}${fld("fo-c", "Hidratos (g)", x && x.carbs)}${fld("fo-f", "Grasa (g)", x && x.fat)}${fld("fo-fi", "Fibra (g)", x && x.fiber)}${fld("fo-s", "Porción habitual (g)", x ? x.serving_g : 100)}</div>`
       : `<p class="muted small">${esc(x.category)} · valores por 100 g: ${num(x.kcal)} kcal · ${num(x.protein, 1)} P · ${num(x.carbs, 1)} C · ${num(x.fat, 1)} G · porción ${num(x.serving_g)} g</p>`}
+    ${x ? `<p class="muted small">${x.months && x.months.length ? `Temporada: ${monthsText(x.months)}` : "Disponible todo el año"}${x.origin ? ` · producto de ${ORIGIN[x.origin]}` : ""}</p>` : ""}
     <div class="fld"><label for="fo-notes">Notas</label><input class="inp" id="fo-notes" maxlength="300" value="${esc(x ? x.notes : "")}"></div>
     ${x ? `<label class="check"><input type="checkbox" id="fo-fav" ${x.favorite ? "checked" : ""}>Favorito</label><label class="check"><input type="checkbox" id="fo-arch" ${x.archived ? "checked" : ""}>Archivado (no sale en las búsquedas)</label>` : ""}
     <div class="dialog-actions">${x && x.source === "custom" ? `<button class="btn danger" type="button" id="fo-del">${icon("trash")}Borrar</button>` : ""}<span class="spacer"></span><button class="btn" data-close type="button">Cancelar</button><button class="btn primary" id="fo-ok" type="button">Guardar</button></div>`, { cls: "wide" });
@@ -126,11 +153,11 @@ async function recipeDialog(rid) {
   el.querySelector("#rc-ok").addEventListener("click", async (ev) => {
     setBusy(ev.currentTarget, true);
     const body = { name: el.querySelector("#rc-name").value, servings: parseNum(el.querySelector("#rc-sv").value), steps: el.querySelector("#rc-steps").value, items: items.map((i) => ({ food_id: i.food_id, grams: parseNum(i.grams) })) };
-    try { rid ? await put(`/api/recipes/${rid}`, body) : await post("/api/recipes", body); el.close(); recipes = await get("/api/recipes"); render(); toast({ text: "Receta guardada", kind: "ok", timeout: 2000 }); }
+    try { rid ? await put(`/api/recipes/${rid}`, body) : await post("/api/recipes", body); el.close(); await loadRecipes(); render(); toast({ text: "Receta guardada", kind: "ok", timeout: 2000 }); }
     catch (x) { toast({ text: x.message, kind: "err" }); setBusy(ev.currentTarget, false); }
   });
   const d = el.querySelector("#rc-del");
-  if (d) d.addEventListener("click", async () => { if (await confirmDialog({ title: "Archivar receta", body: "Dejará de aparecer; el menú ya planificado se conserva.", confirm: "Archivar", danger: true })) { await del(`/api/recipes/${rid}`); el.close(); recipes = await get("/api/recipes"); render(); } });
+  if (d) d.addEventListener("click", async () => { if (await confirmDialog({ title: "Archivar receta", body: "Dejará de aparecer; el menú ya planificado se conserva.", confirm: "Archivar", danger: true })) { await del(`/api/recipes/${rid}`); el.close(); await loadRecipes(); render(); } });
 }
 
 export function init() {
@@ -141,10 +168,17 @@ export function init() {
     else if (e.target.id === "fd-f") { f.favorite = e.target.checked; await loadFoods(); render(); }
   });
   r.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-tab],[data-act],[data-food],[data-recipe]");
+    const t = e.target.closest("[data-tab],[data-act],[data-food],[data-recipe],[data-flt]");
     if (!t) return;
     try {
-      if (t.dataset.tab) { tab = t.dataset.tab; if (tab === "recipes") recipes = await get("/api/recipes"); else await loadFoods(); render(); }
+      if (t.dataset.tab) { tab = t.dataset.tab; if (tab === "recipes") await loadRecipes(); else await loadFoods(); render(); }
+      else if (t.dataset.flt) {
+        const k = t.dataset.flt;
+        if (k === "season") f.season = !f.season; else if (k === "cat" || k === "es") f.origin = f.origin === k ? "" : k;
+        else if (k === "rseason") rf.season = !rf.season; else { const o = k.slice(1); rf.origin = rf.origin === o ? "" : o; }
+        if (k.startsWith("r")) await loadRecipes(); else await loadFoods();
+        render();
+      }
       else if (t.dataset.act === "new-food") foodDialog(null);
       else if (t.dataset.act === "new-recipe") recipeDialog(null);
       else if (t.dataset.act === "more") { await loadFoods(true); render(); }
@@ -154,4 +188,4 @@ export function init() {
   });
   r.addEventListener("keydown", (e) => { const c = e.target.closest("[data-food],[data-recipe]"); if (c && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); c.click(); } });
 }
-export async function show() { try { if (tab === "recipes") recipes = await get("/api/recipes"); else await loadFoods(); render(); } catch (e) { root().innerHTML = `<div class="empty">${icon("warning")}<p>No se pudieron cargar los alimentos.</p></div>`; } }
+export async function show() { try { try { season = await get("/api/season"); } catch (e) { season = null; } if (tab === "recipes") await loadRecipes(); else await loadFoods(); render(); } catch (e) { root().innerHTML = `<div class="empty">${icon("warning")}<p>No se pudieron cargar los alimentos.</p></div>`; } }

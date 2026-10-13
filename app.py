@@ -84,6 +84,7 @@ app.config.update(
 db.init()
 core.seed()
 nutri.seed_foods()
+nutri.seed_recipes()
 app.register_blueprint(nutri.bp)
 
 # ---------------------------------------------------------------- seguridad (sesion compartida con el portal)

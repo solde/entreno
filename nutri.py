@@ -66,21 +66,119 @@ def seed_foods():
     with db.tx() as c:
         for e in items:
             if c.execute("SELECT 1 FROM foods WHERE id=?", (e["id"],)).fetchone():
-                c.execute("UPDATE foods SET name=?, category=?, kcal=?, protein=?, carbs=?, fat=?, fiber=?, serving_g=? WHERE id=? AND source='lib'",
-                          (e["name"], e["category"], e["kcal"], e["protein"], e["carbs"], e["fat"], e["fiber"], e["serving_g"], e["id"]))
+                c.execute("UPDATE foods SET name=?, category=?, kcal=?, protein=?, carbs=?, fat=?, fiber=?, serving_g=?, months=?, origin=? WHERE id=? AND source='lib'",
+                          (e["name"], e["category"], e["kcal"], e["protein"], e["carbs"], e["fat"], e["fiber"], e["serving_g"], _months_str(e.get("months")), e.get("origin") or "", e["id"]))
             else:
-                c.execute("INSERT INTO foods(id,name,category,kcal,protein,carbs,fat,fiber,serving_g,source,created) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                          (e["id"], e["name"], e["category"], e["kcal"], e["protein"], e["carbs"], e["fat"], e["fiber"], e["serving_g"], "lib", db.now()))
+                c.execute("INSERT INTO foods(id,name,category,kcal,protein,carbs,fat,fiber,serving_g,months,origin,source,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                          (e["id"], e["name"], e["category"], e["kcal"], e["protein"], e["carbs"], e["fat"], e["fiber"], e["serving_g"], _months_str(e.get("months")), e.get("origin") or "", "lib", db.now()))
                 n += 1
     return n
 
 
+def seed_recipes():
+    """Recetas tradicionales de la biblioteca (data/recipes.json). Se crean una vez; si la persona las edita o archiva no se tocan,
+    solo se actualiza su etiqueta de temporada/origen. Devuelve cuántas se crearon."""
+    path = os.path.join(HERE, "data", "recipes.json")
+    if not os.path.exists(path):
+        return 0
+    with open(path, encoding="utf-8") as f:
+        items = json.load(f)
+    n, now = 0, db.now()
+    with db.tx() as c:
+        for e in items:
+            r = c.execute("SELECT id FROM recipes WHERE uid=?", (e["uid"],)).fetchone()
+            if r:
+                c.execute("UPDATE recipes SET months=?, origin=?, kind=?, minutes=? WHERE id=? AND source='lib'", (_months_str(e.get("months")), e.get("origin") or "", e.get("kind") or "", e.get("minutes"), r["id"]))
+                continue
+            rows = [(c.execute("SELECT 1 FROM foods WHERE id=?", (i["food_id"],)).fetchone(), i) for i in e["items"]]
+            items_ok = [i for ok, i in rows if ok]
+            if not items_ok:
+                continue
+            rid = c.execute("INSERT INTO recipes(uid,name,servings,steps,notes,months,origin,kind,minutes,source,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (e["uid"], e["name"], e["servings"], e["steps"], e.get("notes") or "", _months_str(e.get("months")), e.get("origin") or "", e.get("kind") or "", e.get("minutes"), "lib", now, now)).lastrowid
+            for pos, i in enumerate(items_ok):
+                c.execute("INSERT INTO recipe_items(recipe_id,position,food_id,grams) VALUES(?,?,?,?)", (rid, pos, i["food_id"], i["grams"]))
+            n += 1
+    return n
+
+
+# ---------------------------------------------------------------- temporada (España / Cataluña)
+
+SEASONS = {
+    "invierno": {"label": "Invierno", "tips": "Cocina de cuchara y de horno: potajes, cocidos y escudella, legumbres, cremas calientes de verdura, caldos, estofados. Cítricos, alcachofas, coles, calçots (enero–marzo), cardo y puerros. Platos que reconfortan y aportan energía."},
+    "primavera": {"label": "Primavera", "tips": "Platos ligeros y verdes: habas, guisantes, espárragos, ajos tiernos, alcachofas al final; revueltos, tortillas, ensaladas templadas, arroces de verdura, pescado a la plancha o al vapor, fresas y cerezas. Menos guisos pesados."},
+    "verano": {"label": "Verano", "tips": "Platos frescos y sin horno largo: gazpacho, salmorejo, ensaladas, escalivada, pisto, ensaladilla, pescado a la plancha, arroces ligeros, fruta de hueso, melón y sandía. Mucha hidratación y verdura cruda."},
+    "otoño": {"label": "Otoño", "tips": "Setas (rovellons, boletus), calabaza, castañas, moniato, higos, uva, granada y membrillo; arroces melosos, cremas, legumbres que vuelven, guisos suaves, fricandó. Cocinas más cálidas sin llegar a los platos de invierno."},
+}
+MONTHS_ES = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def season_name(d=None):
+    d = d or date.today()
+    md = (d.month, d.day)
+    if md >= (12, 21) or md < (3, 21):
+        return "invierno"
+    if md < (6, 21):
+        return "primavera"
+    if md < (9, 23):
+        return "verano"
+    return "otoño"
+
+
+def _months_str(v):
+    if isinstance(v, str):
+        return ",".join(str(int(x)) for x in v.split(",") if x.strip().isdigit() and 1 <= int(x) <= 12)
+    return ",".join(str(int(x)) for x in (v or []) if 1 <= int(x) <= 12)
+
+
+def _months_list(s):
+    return [int(x) for x in str(s or "").split(",") if x.strip().isdigit()]
+
+
+def _in_season(months, month):
+    return (not months) or month in months
+
+
+def season_info(d=None, with_names=True):
+    """Resumen de temporada para la interfaz y para el asistente: alimentos frescos de temporada ahora y tipo de recetas."""
+    d = d or date.today()
+    key = season_name(d)
+    out = {"date": d.isoformat(), "month": d.month, "month_name": MONTHS_ES[d.month], "season": key, "label": SEASONS[key]["label"], "tips": SEASONS[key]["tips"]}
+    if with_names:
+        groups = defaultdict(list)
+        for r in db.q("SELECT name, category, months, origin FROM foods WHERE archived=0 AND months<>'' ORDER BY name COLLATE NOCASE"):
+            if d.month in _months_list(r["months"]):
+                groups[r["category"]].append(r["name"])
+        out["foods"] = {k: v for k, v in groups.items()}
+        rec = [r for r in db.q("SELECT id, name, months, origin, kind FROM recipes WHERE archived=0 AND months<>'' ORDER BY name COLLATE NOCASE") if d.month in _months_list(r["months"])]
+        out["recipes"] = [{"id": r["id"], "name": r["name"], "kind": r["kind"], "origin": r["origin"]} for r in rec]
+    return out
+
+
+def season_text(d=None):
+    """Texto para los prompts del asistente (menú y cocina)."""
+    i = season_info(d)
+    lines = ["Fecha: %s (%s, estación: %s)." % (i["date"], i["month_name"], i["season"]), "Tipo de cocina de esta época: " + i["tips"]]
+    for cat, names in i["foods"].items():
+        lines.append("De temporada ahora (%s): %s." % (cat.lower(), ", ".join(names[:40])))
+    if i["recipes"]:
+        lines.append("Recetas de la biblioteca propias de esta época: " + ", ".join(r["name"] for r in i["recipes"][:40]) + ".")
+    return "\n".join(lines)
+
+
 def food_public(r):
     return {"id": r["id"], "name": r["name"], "category": r["category"], "kcal": r["kcal"], "protein": r["protein"], "carbs": r["carbs"], "fat": r["fat"], "fiber": r["fiber"],
-            "serving_g": r["serving_g"], "notes": r["notes"], "source": r["source"], "favorite": bool(r["favorite"]), "archived": bool(r["archived"])}
+            "serving_g": r["serving_g"], "notes": r["notes"], "source": r["source"], "favorite": bool(r["favorite"]), "archived": bool(r["archived"]),
+            "months": _months_list(r.get("months")), "origin": r.get("origin") or "", "peak": _peak(r.get("months"))}
 
 
-def search_foods(q="", category="", favorite=False, limit=60, offset=0, include_archived=False):
+def _peak(months, month=None):
+    """True si el alimento/receta tiene temporada marcada y estamos dentro de ella (los de todo el año no cuentan como «de temporada»)."""
+    ml = _months_list(months)
+    return bool(ml) and (month or date.today().month) in ml
+
+
+def search_foods(q="", category="", favorite=False, limit=60, offset=0, include_archived=False, season=False, origin=""):
     where, args = [], []
     for w in re.split(r"\s+", (q or "").strip().lower())[:5]:
         if w:
@@ -92,6 +190,12 @@ def search_foods(q="", category="", favorite=False, limit=60, offset=0, include_
         where.append("favorite=1")
     if not include_archived:
         where.append("archived=0")
+    if season:  # solo los que tienen temporada marcada y están en ella este mes
+        where.append("(',' || months || ',') LIKE ?"); args.append("%%,%d,%%" % date.today().month)
+    if origin in ("cat", "es"):
+        where.append("origin=?"); args.append(origin)
+    elif origin == "local":
+        where.append("origin<>''")
     w = (" WHERE " + " AND ".join(where)) if where else ""
     total = db.one("SELECT COUNT(*) AS n FROM foods" + w, args)["n"]
     rows = db.q("SELECT * FROM foods" + w + " ORDER BY favorite DESC, name COLLATE NOCASE LIMIT ? OFFSET ?", args + [max(1, min(200, limit)), max(0, offset)])
@@ -120,14 +224,16 @@ def _food_fields(d, partial=False):
         out["category"] = str(d.get("category") or "Otros").strip()[:40] or "Otros"
     if "notes" in d:
         out["notes"] = str(d["notes"])[:300]
+    if "months" in d:
+        out["months"] = _months_str(d["months"])
     return out
 
 
 def create_food(d, source="custom"):
     f = _food_fields(d)
     fid = "c_" + secrets.token_hex(5)
-    db.run("INSERT INTO foods(id,name,category,kcal,protein,carbs,fat,fiber,serving_g,notes,source,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-           (fid, f["name"], f["category"], f["kcal"], f["protein"], f["carbs"], f["fat"], f["fiber"], f["serving_g"], f.get("notes", ""), source, db.now()))
+    db.run("INSERT INTO foods(id,name,category,kcal,protein,carbs,fat,fiber,serving_g,notes,months,source,created) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+           (fid, f["name"], f["category"], f["kcal"], f["protein"], f["carbs"], f["fat"], f["fiber"], f["serving_g"], f.get("notes", ""), f.get("months", ""), source, db.now()))
     return get_food(fid)
 
 
@@ -146,6 +252,8 @@ def update_food(fid, d):
         for k, v in _food_fields(d, partial=True).items():
             if k != "notes":
                 sets.append(k + "=?"); args.append(v)
+    if "months" in d and r["source"] != "custom":
+        sets.append("months=?"); args.append(_months_str(d["months"]))
     if sets:
         db.run("UPDATE foods SET %s WHERE id=?" % ", ".join(sets), args + [fid])
     return get_food(fid)
@@ -166,17 +274,24 @@ def recipe_public(r, full=True):
     rows, tot = _recipe_totals(r["id"])
     sv = r["servings"] or 1
     out = {"id": r["id"], "uid": r["uid"], "name": r["name"], "servings": r["servings"], "notes": r["notes"], "archived": bool(r["archived"]),
-           "per_serving": {k: r1(v / sv) for k, v in tot.items()}, "n_items": len(rows)}
+           "per_serving": {k: r1(v / sv) for k, v in tot.items()}, "n_items": len(rows),
+           "months": _months_list(r.get("months")), "origin": r.get("origin") or "", "kind": r.get("kind") or "", "minutes": r.get("minutes"), "source": r.get("source") or "user", "peak": _peak(r.get("months"))}
     if full:
         out["steps"] = r["steps"]
         out["items"] = [{"food_id": x["food_id"], "name": x["name"], "grams": x["grams"]} for x in rows]
     return out
 
 
-def list_recipes(q="", include_archived=False):
+def list_recipes(q="", include_archived=False, season=False, origin=""):
     rows = db.q("SELECT * FROM recipes" + ("" if include_archived else " WHERE archived=0") + " ORDER BY name COLLATE NOCASE")
     if q:
         rows = [r for r in rows if q.lower() in r["name"].lower()]
+    if season:  # las de temporada ahora y las de todo el año
+        rows = [r for r in rows if _in_season(_months_list(r["months"]), date.today().month)]
+    if origin == "local":
+        rows = [r for r in rows if r["origin"]]
+    elif origin in ("cat", "es"):
+        rows = [r for r in rows if r["origin"] == origin]
     return [recipe_public(r, full=False) for r in rows]
 
 
@@ -224,6 +339,8 @@ def save_recipe(d, rid=None):
             if "archived" in d:
                 c.execute("UPDATE recipes SET archived=? WHERE id=?", (1 if d["archived"] else 0, rid))
             c.execute("UPDATE recipes SET updated=? WHERE id=?", (now, rid))
+        if "months" in d:
+            c.execute("UPDATE recipes SET months=? WHERE id=?", (_months_str(d["months"]), rid))
         if items is not None:
             c.execute("DELETE FROM recipe_items WHERE recipe_id=?", (rid,))
             for pos, (fid, g) in enumerate(items):
@@ -597,7 +714,8 @@ def export_part():
               "serving_g": r["serving_g"], "notes": r["notes"], "favorite": bool(r["favorite"]), "archived": bool(r["archived"])}
              for r in db.q("SELECT * FROM foods WHERE source='custom' OR favorite=1 OR archived=1 OR notes!=''")]
     recipes = []
-    for r in db.q("SELECT * FROM recipes ORDER BY id"):
+    # las de la biblioteca sin tocar no se exportan (se vuelven a sembrar solas); sí las que la persona ha editado o archivado
+    for r in db.q("SELECT * FROM recipes WHERE source<>'lib' OR updated>created OR archived=1 ORDER BY id"):
         rows = db.q("SELECT food_id, grams FROM recipe_items WHERE recipe_id=? ORDER BY position", (r["id"],))
         recipes.append({"uid": r["uid"], "name": r["name"], "servings": r["servings"], "steps": r["steps"], "notes": r["notes"], "archived": bool(r["archived"]), "items": rows})
     uid_of = {r["id"]: r["uid"] for r in db.q("SELECT id, uid FROM recipes")}
@@ -613,7 +731,7 @@ def import_part(c, data, mode, rep):
         if not isinstance(data.get(k, []), list) or len(data.get(k, [])) > 50000:
             raise TrainError("sección %s no válida" % k)
     if mode == "replace":
-        c.execute("DELETE FROM meal_entries"); c.execute("DELETE FROM recipes"); c.execute("DELETE FROM foods WHERE source='custom'")
+        c.execute("DELETE FROM meal_entries"); c.execute("DELETE FROM recipes WHERE source<>'lib'"); c.execute("DELETE FROM foods WHERE source='custom'")
         c.execute("UPDATE foods SET favorite=0, archived=0, notes=''")
     rep.update({"foods": 0, "recipes": 0, "plan_entries": 0})
     for f in data.get("foods", []):
@@ -710,7 +828,12 @@ def api_foods():
     if request.method == "POST":
         return jsonify(create_food(_body())), 201
     return jsonify(search_foods(request.args.get("q", ""), request.args.get("category", ""), request.args.get("favorite") == "1",
-                                request.args.get("limit", 60, type=int), request.args.get("offset", 0, type=int)))
+                                request.args.get("limit", 60, type=int), request.args.get("offset", 0, type=int), season=request.args.get("season") == "1", origin=request.args.get("origin", "")))
+
+
+@bp.route("/api/season")
+def api_season():
+    return jsonify(season_info())
 
 
 @bp.route("/api/foods/<fid>", methods=["GET", "PATCH", "DELETE"])
@@ -732,7 +855,7 @@ def api_food(fid):
 def api_recipes():
     if request.method == "POST":
         return jsonify(save_recipe(_body())), 201
-    return jsonify(list_recipes(request.args.get("q", ""), request.args.get("archived") == "1"))
+    return jsonify(list_recipes(request.args.get("q", ""), request.args.get("archived") == "1", request.args.get("season") == "1", request.args.get("origin", "")))
 
 
 @bp.route("/api/recipes/<int:rid>", methods=["GET", "PUT", "DELETE"])
@@ -840,10 +963,17 @@ def agent_profile():
     return jsonify({"settings": {k: s[k] for k in keep}, "targets": targets(), "slots": SLOTS, "today": date.today().isoformat()})
 
 
+@bp.route("/agent/season")
+def agent_season():
+    return jsonify({"text": season_text(), **season_info(with_names=False)})
+
+
 @bp.route("/agent/foods")
 def agent_foods():
-    r = search_foods(request.args.get("q", ""), request.args.get("category", ""), False, min(40, request.args.get("limit", 15, type=int)))
-    return jsonify({"total": r["total"], "items": [{k: f[k] for k in ("id", "name", "category", "kcal", "protein", "carbs", "fat", "serving_g")} for f in r["items"]], "per": "100 g"})
+    r = search_foods(request.args.get("q", ""), request.args.get("category", ""), False, min(40, request.args.get("limit", 15, type=int)),
+                     season=request.args.get("season") == "1", origin=request.args.get("origin", ""))
+    return jsonify({"total": r["total"], "items": [{k: f[k] for k in ("id", "name", "category", "kcal", "protein", "carbs", "fat", "serving_g", "months", "origin", "peak")} for f in r["items"]], "per": "100 g",
+                    "nota": "peak=true: de temporada este mes; months vacío = todo el año"})
 
 
 @bp.route("/agent/foods", methods=["POST"])
@@ -853,7 +983,7 @@ def agent_food_create():
 
 @bp.route("/agent/recipes")
 def agent_recipes():
-    return jsonify(list_recipes(request.args.get("q", "")))
+    return jsonify(list_recipes(request.args.get("q", ""), season=request.args.get("season") == "1", origin=request.args.get("origin", "")))
 
 
 @bp.route("/agent/recipes/<int:rid>")

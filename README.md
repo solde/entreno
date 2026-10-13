@@ -29,6 +29,13 @@ navegador ──► portal.solde.cat/entreno (Flask + SQLite, ns training; sesi�
 - **Ajustes**: perfil (objetivo, experiencia, días, material, lesiones), unidades, sonido/vibración/pantalla, ajuste automático, y **exportar/importar** (JSON completo, con o sin imágenes
   propias; CSV de entrenamientos; importación combinar/reemplazar con validación).
 
+## Temporada y producto local
+
+- Cada alimento puede llevar `months` (meses de temporada; vacío = todo el año) y `origin` (`cat` | `es`). **`peak`** = «de temporada este mes». Los filtros «De temporada ahora», «Cataluña» y «España» están en Alimentos y en Recetas, y el selector de recetas del menú pone primero las de la época.
+- **Biblioteca de 59 recetas tradicionales** (`data/recipes.json`, de `tools/make_recipes.py`; `source='lib'`, uid `lib_*`) con época ideal, origen, tipo y minutos. Se siembran al arrancar y no se pisan si las editas; el export solo incluye las editadas o archivadas.
+- Estación por fechas (invierno 21-dic…20-mar, primavera hasta 20-jun, verano hasta 22-sep, otoño). `GET /api/season` y `GET /agent/season`. El asistente recibe en el prompt (`{{SEASON}}`: menú, cocina y chat) los frescos de temporada, el tipo de cocina de la época y las recetas de la biblioteca de ese mes; `food_search`/`recipe_list` aceptan `season=true` y `origin`.
+- Tras regenerar datos: `python tools/make_foods.py && python tools/make_recipes.py` (el segundo falla si un ingrediente no existe). Los ids `f_001…f_108` no cambian.
+
 ## Nutrición (menú diario)
 
 Grupo **Nutrición** del portal (misma app, vistas `menu`, `foods`, `cook`, `shopping`; el portal lo incrusta con su propio iframe sobre `/entreno/`):
@@ -36,7 +43,7 @@ Grupo **Nutrición** del portal (misma app, vistas `menu`, `foods`, `cook`, `sho
 - **Menú en calendario** con vistas **día / semana / mes**: por día seis momentos (desayuno, media mañana, comida, merienda, cena, otros) con alimentos (gramos), recetas (raciones) o entradas libres con
   macros; totales del día frente a tus objetivos (calorías, proteína, hidratos, grasa), marcar como hecho, copiar día o semana, vaciar y **historial con deshacer**. La semana muestra una cuadrícula
   momento × día y el mes un calendario con kcal y puntos de comidas, coloreado según el objetivo (verde ±10 %, ámbar por debajo, rojo por encima).
-- **Alimentos y recetas**: 108 alimentos habituales con valores **orientativos** por 100 g (`data/foods.json`, generado por `tools/make_foods.py`), propios ilimitados, favoritos/archivo; recetas con
+- **Alimentos y recetas**: 258 alimentos (108 habituales + 150 productos locales de España y Cataluña con su calendario de temporada) con valores **orientativos** por 100 g (`data/foods.json`, generado por `tools/make_foods.py` + `tools/local_foods.py`), propios ilimitados, favoritos/archivo; recetas con
   ingredientes en gramos y macros por ración.
 - **Lista de la compra** de cualquier rango (ingredientes sumados, recetas desglosadas; marcas guardadas en el navegador; copiar al portapapeles).
 - **Asistente conectado**: el mismo agente que las rutinas (MCP `training`) lee el perfil nutricional, alimentos, recetas, menú y entrenos, y edita el menú con `plan_set_days` (motivo obligatorio, estado

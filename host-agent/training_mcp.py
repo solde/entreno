@@ -143,7 +143,8 @@ def t_nutrition_profile(a):
 
 
 def t_food_search(a):
-    return j(call("GET", "/agent/foods", {"q": a.get("q"), "category": a.get("category"), "limit": _int(a.get("limit"), 15, 1, 40)}))
+    return j(call("GET", "/agent/foods", {"q": a.get("q"), "category": a.get("category"), "limit": _int(a.get("limit"), 15, 1, 40),
+                                          "season": "1" if a.get("season") else None, "origin": a.get("origin")}))
 
 
 def t_food_create(a):
@@ -153,7 +154,7 @@ def t_food_create(a):
 
 
 def t_recipe_list(a):
-    return j(call("GET", "/agent/recipes", {"q": a.get("q")}))
+    return j(call("GET", "/agent/recipes", {"q": a.get("q"), "season": "1" if a.get("season") else None, "origin": a.get("origin")}))
 
 
 def t_recipe_get(a):
@@ -161,7 +162,7 @@ def t_recipe_get(a):
 
 
 def t_recipe_save(a):
-    body = {k: a[k] for k in ("name", "servings", "steps", "notes") if k in a}
+    body = {k: a[k] for k in ("name", "servings", "steps", "notes", "months") if k in a}
     if "items" in a:
         body["items"] = [{"food_id": i.get("food_id"), "grams": i.get("grams")} for i in a["items"] if isinstance(i, dict)]
     if a.get("id"):
@@ -224,6 +225,7 @@ def t_plan_restore(a):
 
 S = lambda **p: {"type": "object", "properties": p}  # noqa: E731
 STR, INT, NUM = {"type": "string"}, {"type": "integer"}, {"type": "number"}
+BOOL = {"type": "boolean"}
 ITEM = {"type": "object", "description": "Un ejercicio de la rutina", "properties": {
     "exercise_id": {"type": "string", "description": "id exacto de exercise_search"}, "sets": INT, "reps_min": INT, "reps_max": INT, "weight": {"type": "number", "description": "peso por serie en la unidad del perfil"},
     "duration_s": {"type": "integer", "description": "segundos por serie/bloque (ejercicios por tiempo y cardio)"}, "distance_m": NUM, "rest_s": {"type": "integer", "description": "descanso entre series (s)"},
@@ -240,9 +242,9 @@ TOOLS = {
     "progress_get": (t_progress_get, {"description": "Evolución de un ejercicio por día (mejor peso, mejores reps, 1RM estimado, volumen, duración).", "inputSchema": S(exercise_id=STR)}),
     "profile_get": (t_profile_get, {"description": "Perfil de la persona (objetivo, experiencia, días por semana, material, lesiones, notas, unidades, estilo de progresión) y resumen reciente.", "inputSchema": S()}),
     "nutrition_profile": (t_nutrition_profile, {"description": "Perfil nutricional de la persona: objetivos diarios (kcal, proteína, hidratos, grasa), dieta, alergias, alimentos que no le gustan, comidas al día, peso/altura/edad, actividad y objetivo.", "inputSchema": S()}),
-    "food_search": (t_food_search, {"description": "Busca alimentos de la base (valores por 100 g: kcal, proteína, hidratos, grasa) por nombre en español. Usa SOLO ids reales para planificar.", "inputSchema": S(q=STR, category=STR, limit=INT)}),
+    "food_search": (t_food_search, {"description": "Busca alimentos de la base (valores por 100 g: kcal, proteína, hidratos, grasa) por nombre en español. Incluye productos locales de España y Cataluña (origin cat/es) con sus meses de temporada (months; peak=true = de temporada este mes). season=true devuelve solo los frescos de temporada ahora; origin=local|cat|es filtra por producto local. Usa SOLO ids reales para planificar.", "inputSchema": S(season=BOOL, origin=STR, q=STR, category=STR, limit=INT)}),
     "food_create": (t_food_create, {"description": "Crea un alimento propio si no existe (valores por 100 g).", "inputSchema": S(name=STR, category=STR, kcal=NUM, protein=NUM, carbs=NUM, fat=NUM, fiber=NUM, serving_g=NUM)}),
-    "recipe_list": (t_recipe_list, {"description": "Lista las recetas guardadas (macros por ración).", "inputSchema": S(q=STR)}),
+    "recipe_list": (t_recipe_list, {"description": "Lista las recetas guardadas, incluida la biblioteca de recetas tradicionales de España y Cataluña (macros por ración, meses ideales en months, peak=true si son de esta época). season=true: solo las de la época actual y las de todo el año; origin: cat | es | local.", "inputSchema": S(q=STR, season=BOOL, origin=STR)}),
     "recipe_get": (t_recipe_get, {"description": "Receta con ingredientes, pasos y macros por ración.", "inputSchema": S(id=INT)}),
     "recipe_save": (t_recipe_save, {"description": "Crea una receta (sin id) o actualiza una (con id). items = [{food_id, grams}] del total de la receta; servings = raciones que salen.", "inputSchema": S(id=INT, name=STR, servings=NUM, steps=STR, notes=STR, items={"type": "array", "items": {"type": "object", "properties": {"food_id": STR, "grams": NUM}, "required": ["food_id", "grams"]}})}),
     "cook_ideas_set": (t_cook_ideas_set, {"description": "Guarda 1-3 ideas de receta para un día (sustituye las ideas anteriores de ese día que la persona no haya guardado). Cada idea: name, servings, minutes, steps (texto numerado), notes y ingredients [{food_id, grams}] con ids REALES de food_search; para sal, especias o aceite en cantidad libre usa {name, qty} sin food_id.", "inputSchema": S(date=STR, ideas={"type": "array", "items": {"type": "object", "properties": {"name": STR, "servings": NUM, "minutes": INT, "steps": STR, "notes": STR, "ingredients": {"type": "array", "items": {"type": "object", "properties": {"food_id": STR, "name": STR, "grams": NUM, "qty": STR}}}}, "required": ["name", "ingredients"]}})}),

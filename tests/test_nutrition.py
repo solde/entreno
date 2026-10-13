@@ -29,7 +29,7 @@ def test_foods_catalog_and_custom(me):
     assert pollo["kcal"] == 165 and pollo["protein"] == 31
     # los valores cuadran con kcal (4/4/9) salvo alcohol
     for f in r["items"]:
-        if f["name"] not in ("Cerveza", "Vino tinto"):
+        if f["name"] not in ("Cerveza", "Vino tinto", "Vino blanco", "Cava brut", "Vermut", "Sidra", "Pimentón de la Vera", "Vinagre de Jerez"):
             assert abs(f["protein"] * 4 + f["carbs"] * 4 + f["fat"] * 9 - f["kcal"]) <= 0.25 * f["kcal"] + 12, f["name"]
     mine = me.post("/api/foods", json={"name": "Mi barrita", "kcal": 380, "protein": 20, "carbs": 40, "fat": 14, "serving_g": 45, "category": "Otros"})
     assert mine.status_code == 201 and mine.get_json()["source"] == "custom"
@@ -51,7 +51,7 @@ def test_recipes_totals(me):
     up = me.put("/api/recipes/%d" % rec["id"], json={"servings": 4}).get_json()
     assert up["per_serving"]["kcal"] == round((130 * 3.6 + 165 * 2.4) / 4, 1)
     assert me.post("/api/recipes", json={"name": "mala", "items": [{"food_id": "nope", "grams": 10}]}).status_code == 422
-    assert me.delete("/api/recipes/%d" % rec["id"]).status_code == 200 and me.get("/api/recipes").get_json() == []
+    assert me.delete("/api/recipes/%d" % rec["id"]).status_code == 200 and [r for r in me.get("/api/recipes").get_json() if r["source"] == "user"] == []
 
 
 def test_plan_entries_day_week_month(me):
@@ -200,3 +200,47 @@ def test_cook_ideas_flow(me, mod):
     c.put("/agent/cook/ideas", json={"date": day, "ideas": [{"name": "Otra", "ingredients": [{"food_id": pollo["id"], "grams": 100}]}]}, headers=AG)
     assert [x["name"] for x in me.get("/api/cook", query_string={"date": day}).get_json()["ideas"]] == ["Pollo con arroz", "Otra"]
     assert me.delete("/api/cook/ideas/%d" % i["id"]).status_code == 200
+
+
+def test_season_and_local_products(me, anon):
+    import json, os
+    from datetime import date
+    import nutri
+    # biblioteca local: alimentos y recetas con temporada/origen
+    cat = me.get("/api/foods", query_string={"origin": "cat", "limit": 200}).get_json()
+    assert cat["total"] >= 30 and all(x["origin"] == "cat" for x in cat["items"])
+    local = me.get("/api/foods", query_string={"origin": "local"}).get_json()["total"]
+    assert local > cat["total"]
+    calcot = me.get("/api/foods", query_string={"q": "calçots"}).get_json()["items"][0]
+    assert calcot["months"] == [1, 2, 3, 12] and calcot["origin"] == "cat"
+    # temporada «ahora»: depende del mes real, pero todo lo devuelto debe tenerlo marcado
+    now = me.get("/api/foods", query_string={"season": "1", "limit": 200}).get_json()
+    assert now["total"] > 10 and all(date.today().month in x["months"] and x["peak"] for x in now["items"])
+    ag = anon.get("/agent/foods", headers=AG, query_string={"season": "1", "origin": "local"}).get_json()
+    assert ag["items"] and all(x["peak"] and x["origin"] for x in ag["items"])
+    # recetas de la biblioteca: macros calculados, filtros y época
+    rs = me.get("/api/recipes").get_json()
+    lib = [r for r in rs if r["source"] == "lib"]
+    assert len(lib) >= 50 and all(r["per_serving"]["kcal"] > 50 for r in lib)
+    assert {r["origin"] for r in lib} == {"cat", "es"}
+    seasonal = me.get("/api/recipes", query_string={"season": "1"}).get_json()
+    assert seasonal and all((not r["months"]) or date.today().month in r["months"] for r in seasonal)
+    assert len(me.get("/api/recipes", query_string={"origin": "cat"}).get_json()) < len(rs)
+    # la siembra es idempotente y no duplica ni pisa recetas editadas
+    rid = lib[0]["id"]
+    me.put("/api/recipes/%d" % rid, json={"name": "Mi versión"})
+    assert nutri.seed_recipes() == 0
+    assert me.get("/api/recipes/%d" % rid).get_json()["name"] == "Mi versión"
+    assert len(me.get("/api/recipes").get_json()) == len(rs)
+    # temporada: texto para el asistente, endpoints y estación
+    assert nutri.season_name(date(2026, 1, 15)) == "invierno" and nutri.season_name(date(2026, 4, 1)) == "primavera"
+    assert nutri.season_name(date(2026, 7, 1)) == "verano" and nutri.season_name(date(2026, 10, 13)) == "otoño" and nutri.season_name(date(2026, 12, 21)) == "invierno"
+    t = nutri.season_text(date(2026, 1, 20))
+    assert "invierno" in t and "Calçots" in t and "Gazpacho" not in t
+    assert "Gazpacho andaluz" in nutri.season_text(date(2026, 7, 20))
+    s = me.get("/api/season").get_json()
+    assert s["season"] and s["foods"] and s["recipes"] and s["tips"]
+    a = anon.get("/agent/season", headers=AG).get_json()
+    assert a["text"] and anon.get("/agent/season").status_code == 401
+    # ids de la biblioteca anterior intactos (los menús ya guardados siguen apuntando al mismo alimento)
+    assert me.get("/api/foods/f_001").get_json()["name"] == "Pechuga de pollo (cruda)"

@@ -199,3 +199,10 @@ button.chip { cursor: pointer; }
   .people .icon-btn { min-width: 40px; min-height: 40px; }
   details > summary { padding: 8px 0; }
 }
+
+/* ---------- temporada y producto local ---------- */
+.season h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
+.season .chips { margin-top: 8px; }
+.chips.tight { margin: 2px 0 0; gap: 4px; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.food-main .chips { margin: 3px 0 0; }

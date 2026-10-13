@@ -106,7 +106,13 @@ def build_system_prompt(name, extra=None, profile_path="/agent/profile"):
     except Exception as e:  # noqa: BLE001
         log("perfil no disponible (%s)" % type(e).__name__)
         today = date.today().isoformat()
-    out = tpl.replace("{{TODAY}}", today).replace("{{PROFILE}}", profile)
+    season = ""
+    if "{{SEASON}}" in tpl:
+        try:
+            season = api("GET", "/agent/season")[1].get("text", "")
+        except Exception as e:  # noqa: BLE001
+            log("temporada no disponible (%s)" % type(e).__name__)
+    out = tpl.replace("{{TODAY}}", today).replace("{{PROFILE}}", profile).replace("{{SEASON}}", season or "(no disponible)")
     for k, v in (extra or {}).items():
         out = out.replace("{{%s}}" % k, v)
     return out

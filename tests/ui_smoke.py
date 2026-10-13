@@ -129,6 +129,14 @@ with sync_playwright() as p:
     page.evaluate("localStorage.setItem('people','1')")
     page.goto(BASE + "#/settings"); page.wait_for_selector("#n-est"); page.fill("#n-weight", "75"); page.fill("#n-height", "178"); page.fill("#n-age", "35"); page.select_option("#n-sex", "m"); page.click("#n-est")
     assert page.input_value("#n-kcal") != "" and int(page.input_value("#n-kcal")) > 1500, "la estimación no rellena las calorías"; page.click("#st-save"); page.wait_for_timeout(500); shot("20-ajustes-nutricion")
+    # temporada y producto local
+    page.goto(BASE + "#/foods"); page.click("[data-tab=foods]"); page.wait_for_selector(".season"); assert "·" in page.inner_text(".season h3")
+    n0 = page.locator(".food").count(); page.click("[data-flt=season]"); page.wait_for_timeout(500)
+    assert page.locator(".food").count() > 0 and all("De temporada" in t for t in page.locator(".food").all_inner_texts()), "el filtro de temporada no filtra"
+    page.click("[data-flt=cat]"); page.wait_for_timeout(500); shot("30-alimentos-temporada")
+    assert page.locator("[data-flt=cat][aria-pressed=true]").count() == 1
+    page.click("[data-tab=recipes]"); page.wait_for_selector("[data-recipe]"); page.click("[data-flt=rseason]"); page.wait_for_timeout(500)
+    assert "Cataluña" in page.inner_text("#view-foods") or page.locator("[data-recipe]").count() > 0; shot("31-recetas-temporada")
     # móvil
     m = b.new_context(viewport={"width": 390, "height": 800}, is_mobile=True, has_touch=True); m.add_cookies([{"name": "homelab_session", "value": cookie, "url": "http://127.0.0.1:18099/"}])
     mp = m.new_page(); mp.goto(BASE + "#/dashboard"); mp.wait_for_selector(".kpis"); mp.screenshot(path=f"{OUT}/12-movil-dashboard.png")
