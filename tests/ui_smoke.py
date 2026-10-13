@@ -7,6 +7,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 OUT = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp()
 tmp = tempfile.mkdtemp()
 os.environ.update(DB_PATH=tmp + "/t.db", MEDIA_DIR=tmp + "/media", AGENT_TOKEN="tok", COOKIE_SECURE="0", SECRET_KEY="k" * 32, URL_PREFIX="/entreno")
@@ -129,11 +130,15 @@ with sync_playwright() as p:
     page.goto(BASE + "#/settings"); page.wait_for_selector("#n-est"); page.fill("#n-weight", "75"); page.fill("#n-height", "178"); page.fill("#n-age", "35"); page.select_option("#n-sex", "m"); page.click("#n-est")
     assert page.input_value("#n-kcal") != "" and int(page.input_value("#n-kcal")) > 1500, "la estimación no rellena las calorías"; page.click("#st-save"); page.wait_for_timeout(500); shot("20-ajustes-nutricion")
     # móvil
-    m = b.new_context(viewport={"width": 390, "height": 800}); m.add_cookies([{"name": "homelab_session", "value": cookie, "url": "http://127.0.0.1:18099/"}])
+    m = b.new_context(viewport={"width": 390, "height": 800}, is_mobile=True, has_touch=True); m.add_cookies([{"name": "homelab_session", "value": cookie, "url": "http://127.0.0.1:18099/"}])
     mp = m.new_page(); mp.goto(BASE + "#/dashboard"); mp.wait_for_selector(".kpis"); mp.screenshot(path=f"{OUT}/12-movil-dashboard.png")
     mp.goto(BASE + "#/exercises"); mp.wait_for_selector(".ex-card"); mp.screenshot(path=f"{OUT}/13-movil-ejercicios.png")
     mp.goto(BASE + "#/menu"); mp.wait_for_selector(".macros"); mp.screenshot(path=f"{OUT}/21-movil-menu.png")
     mp.click("[data-mode=week]"); mp.wait_for_selector(".wk"); mp.screenshot(path=f"{OUT}/22-movil-semana.png")
+    from mobile_audit import audit
+    audit(mp, "semana")
+    for v in ["dashboard", "routines", "train", "exercises", "menu", "foods", "cook", "shopping", "chat", "settings"]:
+        mp.goto("about:blank"); mp.goto(BASE + "?embed=1#/" + v); mp.wait_for_timeout(900); mp.screenshot(path=f"{OUT}/m-{v}.png"); audit(mp, v)
     b.close()
 real = [e for e in errors if "favicon" not in e]
 print("errores de consola:", real or "ninguno")
