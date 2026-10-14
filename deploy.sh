@@ -60,12 +60,8 @@ else
   as_kc "$HERE/host-agent/set-token.sh" --force
 fi
 
-step "4/8 Clave de sesion compartida con el portal"
-KEY_B64="$(k -n apps get secret portal-auth -o jsonpath='{.data.secret_key}')"
-[ -n "$KEY_B64" ] || { echo "portal-auth no tiene secret_key (¿portal sin login configurado?)" >&2; exit 1; }
-k -n training get secret training-auth >/dev/null 2>&1 || k -n training create secret generic training-auth >/dev/null
-k -n training patch secret training-auth --type=merge -p "{\"data\":{\"secret_key\":\"$KEY_B64\"}}" >/dev/null
-echo "training-auth sincronizado con la sesion del portal"
+step "4/8 Clave de sesion (propia del sitio publico; la crea homelab-infra/public-apps/deploy.sh)"
+k -n training get secret training-auth >/dev/null 2>&1 || { echo "falta training-auth: ejecuta antes sudo -E $INFRA/public-apps/deploy.sh" >&2; exit 1; }
 
 step "5/8 Imagen homelab-training:$TAG"
 DOCKER_CONFIG="${DOCKER_CONFIG_REGISTRY:-/root/.docker}" buildctl --addr unix:///run/buildkit/buildkitd.sock build --frontend dockerfile.v0 \
@@ -74,11 +70,8 @@ DOCKER_CONFIG="${DOCKER_CONFIG_REGISTRY:-/root/.docker}" buildctl --addr unix://
 sed -i -E "s#(homelab-training:)v[0-9]+#\1$TAG#" "$INFRA/training/deployment.yaml"
 chown "$OWNER" "$INFRA/training/deployment.yaml"
 
-step "6/8 Manifests (app + acceso de Traefik privado a portal.solde.cat/entreno)"
-k apply -f "$INFRA/training/deployment.yaml" -f "$INFRA/training/ingress.yaml" -f "$INFRA/training/network-policies.yaml"
-# traefik-private tiene que poder leer el ns training y salir hacia el pod (sin esto /entreno cae en el portal)
-k apply -f "$INFRA/training/traefik-private-rbac.yaml" -f "$INFRA/private-portal/network-policies.yaml" -f "$INFRA/private-portal/traefik.yaml"
-k -n private-portal rollout status deploy/traefik-private --timeout=180s
+step "6/8 Manifests (app; se publica en entreno.solde.cat y nutricion.solde.cat con public-apps/deploy.sh)"
+k apply -f "$INFRA/training/deployment.yaml" -f "$INFRA/training/network-policies.yaml"
 k -n training rollout restart deploy/training >/dev/null
 k -n training rollout status deploy/training --timeout=240s
 
@@ -89,18 +82,6 @@ systemctl restart training-agent
 sleep 2
 systemctl is-active training-agent
 
-step "8/8 Portal $PORTAL_TAG (menus Entrenamiento y Nutricion)"
-CUR="$(k -n apps get deploy homelab-portal -o jsonpath='{.spec.template.spec.containers[0].image}' | sed -E 's/.*:v//')"
-WANT="${PORTAL_TAG#v}"
-if [[ "${CUR:-0}" =~ ^[0-9]+$ ]] && [ "$CUR" -ge "$WANT" ]; then
-  echo "el portal ya esta en v$CUR, se omite"
-else
-  [ "$KC_USER" = root ] && export SUDO_USER=root
-  "$INFRA/apps/portal/release.sh" "$PORTAL_TAG"
-  chown "$OWNER" "$INFRA/apps/portal/deployment.yaml" "$INFRA/terminal/gateway.yaml" 2>/dev/null || true
-fi
-
 echo
-echo "LISTO. Abre https://portal.solde.cat y los grupos «Entrenamiento» y «Nutricion» del menu (o https://portal.solde.cat/entreno/)."
-echo "Las imagenes de ejercicios son de la base libre; para cardio y los que no tengan, sube las tuyas en Ejercicios > Imagenes y videos."
-echo "Luego commitea los cambios de tag en $INFRA (training/deployment.yaml, portal, gateway)."
+echo "LISTO (imagen $TAG). Entreno y Nutricion estan en https://entreno.solde.cat y https://nutricion.solde.cat (ya no bajo portal.solde.cat)."
+echo "Luego commitea el cambio de tag en $INFRA (training/deployment.yaml)."
