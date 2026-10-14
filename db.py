@@ -1,4 +1,7 @@
+import contextvars
 import os
+import re
+import shutil
 import sqlite3
 import threading
 import time
@@ -107,16 +110,117 @@ CREATE INDEX IF NOT EXISTS ri_date ON recipe_ideas(date);
 """
 
 
+# --- una base SQLite por persona --------------------------------------------------------------------------------------------------------
+# Cada usuario del login (servicio `auth`) tiene SU fichero (USERS_DIR/<usuario>.db) con el esquema completo y sus propias semillas: todo lo que
+# toca db.q/one/run/tx va a la base del usuario activo (contextvar `use()`), asi que una consulta no puede mezclar datos de dos personas.
+USERS_DIR = os.environ.get("USERS_DIR", os.path.join(os.path.dirname(PATH) or ".", "users"))
+LEGACY_OWNER = os.environ.get("LEGACY_OWNER", "")      # usuario que hereda la base de antes de existir las cuentas (PATH) y su carpeta de media
+USER_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,31}$")     # el mismo que valida `auth`; seguro como nombre de fichero
+HOOKS = []                                               # funciones sin argumentos que se ejecutan al crear la base de una persona (semillas)
+_user = contextvars.ContextVar("user", default=None)
+_ready = set()
+_lock = threading.RLock()
+
+
+class NoUser(RuntimeError):
+    pass
+
+
+def user():
+    return _user.get()
+
+
+def valid_user(name):
+    return isinstance(name, str) and bool(USER_RE.match(name))
+
+
+def path_of(name):
+    if not valid_user(name):
+        raise NoUser("usuario no valido")
+    return os.path.join(USERS_DIR, name + ".db")
+
+
+def users():
+    """Personas con base creada."""
+    try:
+        return sorted(f[:-3] for f in os.listdir(USERS_DIR) if f.endswith(".db") and valid_user(f[:-3]))
+    except OSError:
+        return []
+
+
+def media_base():
+    return os.environ.get("MEDIA_DIR", os.path.join(os.path.dirname(PATH) or ".", "media"))
+
+
+def media_dir(name=None):
+    return os.path.join(media_base(), "u", name or user())
+
+
+def _adopt_legacy(name):
+    """La primera base (antes de las cuentas) y su media pasan a ser de LEGACY_OWNER; solo ocurre una vez y solo para esa persona."""
+    dest = path_of(name)
+    if name != LEGACY_OWNER or os.path.exists(dest) or not os.path.exists(PATH):
+        return
+    os.makedirs(USERS_DIR, exist_ok=True)
+    c = sqlite3.connect(PATH, timeout=30)
+    c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    c.close()
+    os.replace(PATH, dest)
+    for ext in ("-wal", "-shm"):
+        try:
+            os.remove(PATH + ext)
+        except OSError:
+            pass
+    base, mine = media_base(), media_dir(name)
+    if os.path.isdir(base):
+        os.makedirs(mine, mode=0o700, exist_ok=True)
+        for e in os.listdir(base):
+            if e != "u":
+                shutil.move(os.path.join(base, e), os.path.join(mine, e))
+
+
+def _open(name):
+    os.makedirs(USERS_DIR, exist_ok=True)
+    c = sqlite3.connect(path_of(name), timeout=15, isolation_level=None, check_same_thread=False)
+    c.row_factory = sqlite3.Row
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA foreign_keys=ON")
+    c.execute("PRAGMA synchronous=NORMAL")
+    return c
+
+
+def use(name):
+    """Activa la base de `name` para esta peticion/hilo (None = ninguna). Crea y siembra la base la primera vez."""
+    if name is None:
+        _user.set(None)
+        return
+    if not valid_user(name):
+        raise NoUser("usuario no valido")
+    _user.set(name)
+    if name in _ready:
+        return
+    with _lock:
+        if name in _ready:
+            return
+        _adopt_legacy(name)
+        c = conn()
+        c.executescript(SCHEMA)
+        _migrate(c)
+        _ready.add(name)
+        for h in HOOKS:          # semillas de la biblioteca (ejercicios, alimentos, recetas); lo editado por la persona no se toca
+            h()
+
+
 def conn():
-    c = getattr(_local, "c", None)
+    name = _user.get()
+    if name is None:
+        raise NoUser("sin usuario activo")
+    cache = getattr(_local, "c", None)
+    if cache is None:
+        cache = _local.c = {}
+    c = cache.get(name)
     if c is None:
-        os.makedirs(os.path.dirname(PATH) or ".", exist_ok=True)
-        c = sqlite3.connect(PATH, timeout=15, isolation_level=None)
-        c.row_factory = sqlite3.Row
-        c.execute("PRAGMA journal_mode=WAL")
-        c.execute("PRAGMA foreign_keys=ON")
-        c.execute("PRAGMA synchronous=NORMAL")
-        _local.c = c
+        c = cache[name] = _open(name)
     return c
 
 
@@ -128,9 +232,7 @@ COLUMNS = (
 )
 
 
-def init():
-    c = conn()
-    c.executescript(SCHEMA)
+def _migrate(c):
     for table, col, decl in COLUMNS:
         if col not in {r["name"] for r in c.execute("PRAGMA table_info(%s)" % table).fetchall()}:
             c.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, decl))

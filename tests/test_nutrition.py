@@ -229,12 +229,15 @@ def test_season_and_local_products(me, anon):
     # la siembra es idempotente y no duplica ni pisa recetas editadas
     rid = lib[0]["id"]
     me.put("/api/recipes/%d" % rid, json={"name": "Mi versión"})
+    import db
+    db.use("tester")          # las llamadas directas a nutri.* necesitan base activa (en la app la fija la peticion)
     assert nutri.seed_recipes() == 0
     assert me.get("/api/recipes/%d" % rid).get_json()["name"] == "Mi versión"
     assert len(me.get("/api/recipes").get_json()) == len(rs)
     # temporada: texto para el asistente, endpoints y estación
     assert nutri.season_name(date(2026, 1, 15)) == "invierno" and nutri.season_name(date(2026, 4, 1)) == "primavera"
     assert nutri.season_name(date(2026, 7, 1)) == "verano" and nutri.season_name(date(2026, 10, 13)) == "otoño" and nutri.season_name(date(2026, 12, 21)) == "invierno"
+    db.use("tester")
     t = nutri.season_text(date(2026, 1, 20))
     assert "invierno" in t and "Calçots" in t and "Gazpacho" not in t
     assert "Gazpacho andaluz" in nutri.season_text(date(2026, 7, 20))

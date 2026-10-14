@@ -82,10 +82,7 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=int(SESSION_HOURS * 3600),
     MAX_CONTENT_LENGTH=IMPORT_MAX + 1024 * 1024,
 )
-db.init()
-core.seed()
-nutri.seed_foods()
-nutri.seed_recipes()
+db.HOOKS.extend([core.seed, nutri.seed_foods, nutri.seed_recipes])      # semillas de cada base personal (ver db.use)
 app.register_blueprint(nutri.bp)
 
 # ---------------------------------------------------------------- seguridad (sesion compartida con el portal)
@@ -102,7 +99,7 @@ def _same_origin():
 
 
 def _logged():
-    return bool(session.get("auth") and session.get("exp", 0) > time.time())
+    return bool(session.get("auth") and session.get("exp", 0) > time.time() and db.valid_user(session.get("user")))
 
 
 def _to_login():
@@ -125,6 +122,12 @@ def gate():
         tok = request.headers.get("X-Agent-Token", "")
         if not AGENT_TOKEN or not hmac.compare_digest(tok, AGENT_TOKEN):
             return jsonify({"error": "unauthorized"}), 401
+        if path == "/agent/next":
+            return None                                   # recorre las bases de todas las personas (ver agent_next)
+        who = request.headers.get("X-Agent-User", "")      # el asistente trabaja SIEMPRE en nombre de una persona concreta (la dueña del trabajo)
+        if who not in db.users():
+            return jsonify({"error": "usuario del agente desconocido"}), 400
+        db.use(who)
         return None
     if path.startswith("/static/"):
         return None
@@ -143,7 +146,13 @@ def gate():
         sent, want = request.headers.get("X-CSRF-Token", ""), session.get("csrf", "")
         if not want or not hmac.compare_digest(sent, want):
             return jsonify({"error": "csrf"}), 403
+    db.use(session["user"])                                # a partir de aqui toda consulta va a la base de esta persona
     return None
+
+
+@app.teardown_request
+def _drop_user(_exc):
+    db.use(None)
 
 
 @app.after_request
@@ -289,7 +298,7 @@ def api_exercise_progress(eid):
 
 
 def _remove_media_dir(eid):
-    d = os.path.join(core.MEDIA_DIR, eid)
+    d = os.path.join(db.media_dir(), eid)
     if os.path.isdir(d):
         for f in os.listdir(d):
             try:
@@ -311,7 +320,7 @@ def api_media_upload(eid):
         abort(400, description="no hay archivos")
     if len(media) + len(items) > MAX_MEDIA:
         abort(409, description="máximo %d imágenes/vídeos por ejercicio" % MAX_MEDIA)
-    d = os.path.join(core.MEDIA_DIR, eid)
+    d = os.path.join(db.media_dir(), eid)
     os.makedirs(d, mode=0o700, exist_ok=True)
     added = []
     for f in items:
@@ -352,7 +361,7 @@ def api_media_delete(eid, fname):
     if len(keep) == len(media):
         abort(404, description="archivo no encontrado")
     try:
-        os.remove(os.path.join(core.MEDIA_DIR, eid, fname))
+        os.remove(os.path.join(db.media_dir(), eid, fname))
     except OSError:
         pass
     db.run("UPDATE exercises SET user_media=? WHERE id=?", (json.dumps(keep), eid))
@@ -364,8 +373,8 @@ def media_file(eid, fname):
     r = found(db.one("SELECT user_media FROM exercises WHERE id=?", (eid,)), "archivo")
     if not any(m["file"] == fname for m in core.jl(r["user_media"])):
         abort(404, description="archivo no encontrado")
-    p = os.path.realpath(os.path.join(core.MEDIA_DIR, eid, fname))
-    if not p.startswith(os.path.realpath(core.MEDIA_DIR) + os.sep) or not os.path.isfile(p):
+    p = os.path.realpath(os.path.join(db.media_dir(), eid, fname))
+    if not p.startswith(os.path.realpath(db.media_dir()) + os.sep) or not os.path.isfile(p):
         abort(404, description="archivo no encontrado")
     resp = send_file(p, mimetype=mimetypes.guess_type(fname)[0] or "application/octet-stream", conditional=True, max_age=3600)
     resp.headers["Cache-Control"] = "private, max-age=3600"
@@ -615,6 +624,22 @@ def agent_next():
     end = time.time() + wait
     while True:
         AGENT_SEEN["ts"] = time.time()
+        job = None
+        for who in db.users():
+            job = _next_job(who)
+            if job:
+                break
+        if job:
+            return jsonify(job)
+        if time.time() >= end:
+            return "", 204
+        time.sleep(0.7)
+
+
+def _next_job(who):
+    """Primer trabajo en cola de la base de `who` (con su nombre en `user`: el worker lo envia en X-Agent-User en todas las llamadas del trabajo)."""
+    db.use(who)
+    try:
         _fail_stale()
         _fail_stale_evals()
         nutri.fail_stale_jobs()
@@ -643,10 +668,10 @@ def agent_next():
                             c.execute("UPDATE cook_jobs SET status='running', started=? WHERE id=?", (db.now(), k["id"]))
                             job = {"kind": "cook", "job_id": k["id"], "date": k["date"], "instructions": k["instructions"]}
         if job:
-            return jsonify(job)
-        if time.time() >= end:
-            return "", 204
-        time.sleep(0.7)
+            job["user"] = who
+        return job
+    finally:
+        db.use(None)
 
 
 def _turn_for_agent(tid):

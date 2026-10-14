@@ -6,7 +6,8 @@ import time
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-AG = {"X-Agent-Token": "tok"}
+USER = "tester"
+AG = {"X-Agent-Token": "tok", "X-Agent-User": USER}
 
 
 @pytest.fixture()
@@ -22,6 +23,8 @@ def mod(tmp_path, monkeypatch):
         sys.modules.pop(m, None)
     app = importlib.import_module("app")
     app.app.testing = True
+    app.db.use(USER)          # base personal de la persona de prueba (la crea y siembra)
+    app.db.use(None)
     return app
 
 
@@ -30,9 +33,9 @@ class Client:
         self.c = c
         self.csrf = "csrf-token"
 
-    def login(self):
+    def login(self, user=USER):
         with self.c.session_transaction() as s:
-            s.update(auth=True, exp=time.time() + 3600, csrf=self.csrf)
+            s.update(auth=True, user=user, exp=time.time() + 3600, csrf=self.csrf)
 
     def req(self, method, url, **kw):
         h = kw.pop("headers", {})

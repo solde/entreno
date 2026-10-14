@@ -53,6 +53,14 @@ Grupo **Nutrición** del portal (misma app, vistas `menu`, `foods`, `cook`, `sho
 - **Cocinar** (vista `cook`): elige un día, lista sus alimentos (recetas desglosadas) y «Sugerir recetas» encola `cook_jobs` (prompt `cook_prompt.md`, herramienta `cook_ideas_set`): el asistente propone 1–3 recetas con esos alimentos (+ básicos de despensa), guardadas como `recipe_ideas` (macros por ración calculados, no son recetas aún). «Guardar en mis recetas» las convierte en receta real (solo ingredientes con alimento de la base); una nueva tanda sustituye las no guardadas. No toca el menú.
 - **Datos**: se exportan e importan con el resto (JSON: alimentos propios, recetas y menú; CSV del menú). No sustituye a un dietista; con patologías, embarazo o trastornos alimentarios, consulta a un profesional.
 
+## Datos por persona (cada usuario ve solo lo suyo)
+
+Cada usuario del login (`auth`, cookie `solde_session` con `user`) tiene **su propia base SQLite** (`/data/users/<usuario>.db`: rutinas, entrenos, perfil y ajustes, chat, menús, alimentos, recetas…) y su carpeta de media (`/data/media/u/<usuario>/`), sembradas con la biblioteca común al entrar por primera vez.
+`db.use(usuario)` (contextvar) fija la base de cada petición (`gate()`), y `db.q/one/run/tx` van siempre a ella: ninguna consulta puede mezclar personas (probado en `tests/test_isolation.py`: rutinas, ejercicios y alimentos propios, media, chat, ajustes, y el asistente).
+- **Asistente**: el worker (`training-agent.service`) pide `/agent/next` (recorre las bases de todas las personas) y el trabajo trae `user`; desde ahí **todas** las llamadas del trabajo (worker y MCP, variable `TRAINING_USER`) llevan `X-Agent-User` y la app solo sirve datos de esa persona. Sin cabecera o con un usuario desconocido → 400.
+- **Migración**: la base anterior a las cuentas (`/data/training.db` y `/data/media/*`) pasa, la primera vez que entra, al usuario de `LEGACY_OWNER` (manifest: `dsoldevila`); nadie más la ve. Una cookie sin `user` (anterior a las cuentas) pide volver a entrar.
+- Tras actualizar `host-agent/`: `sudo -E host-agent/install.sh` y reiniciar `training-agent`.
+
 ## Seguridad
 
 - Sesión del portal (cookie `homelab_session`, misma `SECRET_KEY` copiada a `training-auth`), CSRF, mismo origen; `/agent/*` solo por ClusterIP y con token (404 bajo el prefijo).

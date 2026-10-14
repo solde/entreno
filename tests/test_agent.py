@@ -17,6 +17,7 @@ def env(mod, anon, monkeypatch):
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     monkeypatch.setenv("TRAINING_URL", "http://127.0.0.1:%d" % srv.server_port)
     monkeypatch.setenv("TRAINING_TOKEN", "tok")
+    monkeypatch.setenv("TRAINING_USER", "tester")
     sys.modules.pop("training_mcp", None)
     mcp = importlib.import_module("training_mcp")
     anon.login()

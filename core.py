@@ -13,7 +13,6 @@ import db
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TZ = ZoneInfo(os.environ.get("TRAINING_TZ", "Europe/Madrid"))
-MEDIA_DIR = os.environ.get("MEDIA_DIR", os.path.join(os.path.dirname(db.PATH) or ".", "media"))
 EX_ID_RE = re.compile(r"^[A-Za-z0-9_().\-]{1,90}$")
 MAX_ITEMS = 40
 CATEGORIES = ["strength", "cardio", "stretching", "plyometrics", "powerlifting", "olympic weightlifting", "strongman"]
@@ -630,7 +629,7 @@ def export_all(include_media=False):
         if include_media:
             media = []
             for m in jl(r["user_media"]):
-                p = os.path.join(MEDIA_DIR, r["id"], m["file"])
+                p = os.path.join(db.media_dir(), r["id"], m["file"])
                 if os.path.isfile(p) and os.path.getsize(p) <= 8 * 2**20:
                     with open(p, "rb") as f:
                         media.append({"file": m["file"], "kind": m.get("kind", "image"), "b64": base64.b64encode(f.read()).decode()})
@@ -710,8 +709,8 @@ def import_all(data, mode="merge"):
                     continue
                 if len(raw) > 8 * 2**20 or not sniff_media(raw):
                     continue
-                os.makedirs(os.path.join(MEDIA_DIR, eid), mode=0o700, exist_ok=True)
-                with open(os.path.join(MEDIA_DIR, eid, m["file"]), "wb") as f:
+                os.makedirs(os.path.join(db.media_dir(), eid), mode=0o700, exist_ok=True)
+                with open(os.path.join(db.media_dir(), eid, m["file"]), "wb") as f:
                     f.write(raw)
                 media.append({"file": m["file"], "kind": sniff_media(raw)[1]})
             if media:

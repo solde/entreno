@@ -31,6 +31,8 @@ def pub(tmp_path, monkeypatch):
         sys.modules.pop(m, None)
     app = importlib.import_module("app")
     app.app.testing = True
+    app.db.use("tester")
+    app.db.use(None)
     yield app
     s.shutdown()
 
@@ -80,10 +82,10 @@ def test_domain_modes(pub):
 
 def test_agent_only_from_host(pub):
     c = pub.app.test_client()
-    ok = c.get("/agent/profile", headers={"X-Agent-Token": "tok"})
+    ok = c.get("/agent/profile", headers={"X-Agent-Token": "tok", "X-Agent-User": "tester"})
     assert ok.status_code == 200                                              # directo (127.0.0.1 = host de prueba)
-    assert c.get("/agent/profile", headers={"X-Agent-Token": "tok", "X-Forwarded-For": "8.8.8.8"}).status_code == 404      # via Traefik/internet: nunca
-    assert c.get("/agent/profile", headers={"X-Agent-Token": "tok"}, environ_overrides={"REMOTE_ADDR": "10.42.7.7"}).status_code == 404
+    assert c.get("/agent/profile", headers={"X-Agent-Token": "tok", "X-Agent-User": "tester", "X-Forwarded-For": "8.8.8.8"}).status_code == 404      # via Traefik/internet: nunca
+    assert c.get("/agent/profile", headers={"X-Agent-Token": "tok", "X-Agent-User": "tester"}, environ_overrides={"REMOTE_ADDR": "10.42.7.7"}).status_code == 404
     assert c.get("/agent/profile").status_code in (401, 404)
 
 

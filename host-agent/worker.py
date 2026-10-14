@@ -54,10 +54,15 @@ def token():
         return f.read().strip()
 
 
+WHO = {"user": None}      # persona dueña del trabajo en curso: todas las llamadas a la app y al MCP van en su nombre (X-Agent-User)
+
+
 def api(method, path, body=None, timeout=15):
     data = json.dumps(body, default=str).encode() if body is not None else None
-    req = urllib.request.Request(BASE + path, data=data, method=method, headers={
-        "X-Agent-Token": token(), "Content-Type": "application/json"})
+    hdr = {"X-Agent-Token": token(), "Content-Type": "application/json"}
+    if WHO["user"]:
+        hdr["X-Agent-User"] = WHO["user"]
+    req = urllib.request.Request(BASE + path, data=data, method=method, headers=hdr)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         raw = r.read()
         return r.status, (json.loads(raw) if raw else None)
@@ -208,7 +213,7 @@ class Streamer:
 
 
 def run_claude(user_message, system_prompt, session_uuid, resume, streamer, timeout, budget, debug_file):
-    env = {"TRAINING_URL": BASE, "TRAINING_TOKEN": token()}
+    env = {"TRAINING_URL": BASE, "TRAINING_TOKEN": token(), "TRAINING_USER": WHO["user"] or ""}
     mcp_cfg = {"mcpServers": {"training": {"command": sys.executable, "args": [os.path.join(HERE, "training_mcp.py")], "env": env}}}
     fd, mcp_path = tempfile.mkstemp(prefix="mcp-", suffix=".json", dir=RUN_DIR)  # 0600
     with os.fdopen(fd, "w") as f:
@@ -365,7 +370,11 @@ def main():
             status, job = api("GET", "/agent/next?wait=%d" % POLL_WAIT, timeout=POLL_WAIT + 15)
             backoff = 2
             if status == 200 and job:
-                {"eval": process_eval, "nplan": process_nplan, "cook": process_cook}.get(job.get("kind"), process_chat)(job)
+                WHO["user"] = job.get("user")
+                try:
+                    {"eval": process_eval, "nplan": process_nplan, "cook": process_cook}.get(job.get("kind"), process_chat)(job)
+                finally:
+                    WHO["user"] = None
         except urllib.error.HTTPError as e:
             log("app respondió %d, reintento en %ds" % (e.code, backoff))
             time.sleep(backoff)

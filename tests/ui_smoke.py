@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 OUT = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp()
 tmp = tempfile.mkdtemp()
-os.environ.update(DB_PATH=tmp + "/t.db", MEDIA_DIR=tmp + "/media", AGENT_TOKEN="tok", COOKIE_SECURE="0", SECRET_KEY="k" * 32, URL_PREFIX="/entreno")
+os.environ.update(DB_PATH=tmp + "/t.db", MEDIA_DIR=tmp + "/media", AGENT_TOKEN="tok", COOKIE_SECURE="0", SECRET_KEY="k" * 32, URL_PREFIX="/entreno", AGENT_IPS="127.0.0.1")
 app_mod = importlib.import_module("app")
 from werkzeug.serving import make_server
 from flask import Flask
@@ -20,7 +20,7 @@ from playwright.sync_api import sync_playwright
 srv = make_server("127.0.0.1", 18099, app_mod.app, threaded=True)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 fl = Flask("x"); fl.config.update(SECRET_KEY="k" * 32, SESSION_COOKIE_NAME="solde_session")
-cookie = SecureCookieSessionInterface().get_signing_serializer(fl).dumps({"auth": True, "exp": time.time() + 3600, "csrf": "csrf"})
+cookie = SecureCookieSessionInterface().get_signing_serializer(fl).dumps({"auth": True, "exp": time.time() + 3600, "csrf": "csrf", "user": "david"})
 BASE = "http://127.0.0.1:18099/entreno/"
 errors = []
 
@@ -108,11 +108,11 @@ with sync_playwright() as p:
     # cocinar: ideas de recetas con los alimentos del día
     page.goto(BASE + "#/cook"); page.wait_for_selector("[data-act=ask]:not([disabled])"); assert page.locator("#view-cook .chip").count() >= 2, "no lista los alimentos del día"
     page.fill("#ck-i", "rápido"); page.click("[data-act=ask]"); page.wait_for_selector("#view-cook .banner.info"); shot("23-cocinar-pendiente")
-    ag = {"X-Agent-Token": "tok"}; job = None
+    ag = {"X-Agent-Token": "tok", "X-Agent-User": "david"}; job = None
     for _ in range(4):
         job = ctx.request.fetch("http://127.0.0.1:18099/agent/next?wait=0", headers=ag).json()
         if job.get("kind") == "cook": break
-    assert job and job["kind"] == "cook", job
+    assert job and job.get("kind") == "cook", job
     fid = api("GET", "/api/foods?q=" + "arroz%20blanco").json()["items"][0]["id"]
     ctx.request.fetch("http://127.0.0.1:18099/agent/cook/ideas", method="PUT", headers=ag, data={"date": job["date"], "ideas": [{"name": "Bol de arroz", "servings": 2, "minutes": 15, "steps": "1. Cuece\n2. Sirve", "ingredients": [{"food_id": fid, "grams": 200}, {"name": "Sal", "qty": "una pizca"}]}]})
     ctx.request.fetch("http://127.0.0.1:18099/agent/cook/%d/done" % job["job_id"], method="POST", headers=ag, data={"summary": "ok"})
