@@ -1,20 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Entrenamiento{% endblock %}
+{% block title %}{{ brand[0] }}{% endblock %}
 {% block body %}
-{% set views = [('dashboard','pulse'),('routines','checks'),('train','barbell'),('exercises','search'),('menu','fork-knife'),('foods','book'),('cook','pot'),('shopping','cart'),('chat','chat'),('settings','gear')] %}
 <a class="skip" href="#content">{{ i18n['a11y.skip'] }}</a>
 <div class="app">
   <aside class="sidebar glass" id="sidebar" aria-label="Navegación">
     <div class="brand">
-      <span class="brand-icon">{{ ic('barbell') }}</span>
-      <span class="brand-text"><strong>Entrenamiento</strong><small>Rutinas y progreso</small></span>
+      <span class="brand-icon">{{ ic(brand[2]) }}</span>
+      <span class="brand-text"><strong>{{ brand[0] }}</strong><small>{{ brand[1] }}</small></span>
     </div>
     <nav class="nav" id="nav">
       {% for id, ico in views %}<a href="#/{{ id }}" data-nav="{{ id }}">{{ ic(ico) }}<span>{{ i18n['nav.' ~ ('menu_food' if id == 'menu' else id)] }}</span></a>
       {% endfor %}
     </nav>
     <div class="sidebar-foot">
-      <a class="nav-btn" href="/">{{ ic('home') }}<span>{{ i18n['nav.home'] }}</span></a>
+      {% if mode == 'all' %}<a class="nav-btn" href="/">{{ ic('home') }}<span>{{ i18n['nav.home'] }}</span></a>{% endif %}
       <button class="nav-btn" type="button" id="btn-density">{{ ic('density') }}<span>{{ i18n['density.toggle'] }}</span></button>
     </div>
   </aside>
@@ -34,7 +33,7 @@
 
     <main id="content" class="content" tabindex="-1">
       <div class="banner err" id="banner-offline" hidden>{{ ic('fail') }}<span>{{ i18n['net.offline'] }}</span></div>
-      <a class="banner live-banner" id="live-banner" href="#/train" hidden>{{ ic('timer') }}<span>Entrenamiento en curso — <b id="live-clock">0:00</b></span><em>Volver</em></a>
+      {% if mode != 'nutricion' %}<a class="banner live-banner" id="live-banner" href="#/train" hidden>{{ ic('timer') }}<span>Entrenamiento en curso — <b id="live-clock">0:00</b></span><em>Volver</em></a>{% endif %}
       {% for id, ico in views %}
       <section class="view" id="view-{{ id }}" data-view="{{ id }}" hidden aria-labelledby="h-{{ id }}"></section>
       {% endfor %}

@@ -19,7 +19,7 @@ from playwright.sync_api import sync_playwright
 
 srv = make_server("127.0.0.1", 18099, app_mod.app, threaded=True)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
-fl = Flask("x"); fl.config.update(SECRET_KEY="k" * 32, SESSION_COOKIE_NAME="homelab_session")
+fl = Flask("x"); fl.config.update(SECRET_KEY="k" * 32, SESSION_COOKIE_NAME="solde_session")
 cookie = SecureCookieSessionInterface().get_signing_serializer(fl).dumps({"auth": True, "exp": time.time() + 3600, "csrf": "csrf"})
 BASE = "http://127.0.0.1:18099/entreno/"
 errors = []
@@ -27,7 +27,7 @@ errors = []
 with sync_playwright() as p:
     b = p.chromium.launch()
     ctx = b.new_context(viewport={"width": 1280, "height": 900})
-    ctx.add_cookies([{"name": "homelab_session", "value": cookie, "url": "http://127.0.0.1:18099/"}])
+    ctx.add_cookies([{"name": "solde_session", "value": cookie, "url": "http://127.0.0.1:18099/"}])
     page = ctx.new_page()
     page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
     page.on("pageerror", lambda e: errors.append(str(e)))
@@ -138,7 +138,7 @@ with sync_playwright() as p:
     page.click("[data-tab=recipes]"); page.wait_for_selector("[data-recipe]"); page.click("[data-flt=rseason]"); page.wait_for_timeout(500)
     assert "Cataluña" in page.inner_text("#view-foods") or page.locator("[data-recipe]").count() > 0; shot("31-recetas-temporada")
     # móvil
-    m = b.new_context(viewport={"width": 390, "height": 800}, is_mobile=True, has_touch=True); m.add_cookies([{"name": "homelab_session", "value": cookie, "url": "http://127.0.0.1:18099/"}])
+    m = b.new_context(viewport={"width": 390, "height": 800}, is_mobile=True, has_touch=True); m.add_cookies([{"name": "solde_session", "value": cookie, "url": "http://127.0.0.1:18099/"}])
     mp = m.new_page(); mp.goto(BASE + "#/dashboard"); mp.wait_for_selector(".kpis"); mp.screenshot(path=f"{OUT}/12-movil-dashboard.png")
     mp.goto(BASE + "#/exercises"); mp.wait_for_selector(".ex-card"); mp.screenshot(path=f"{OUT}/13-movil-ejercicios.png")
     mp.goto(BASE + "#/menu"); mp.wait_for_selector(".macros"); mp.screenshot(path=f"{OUT}/21-movil-menu.png")

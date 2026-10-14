@@ -11,6 +11,7 @@ from flask import Flask, Response, abort, jsonify, redirect, render_template, re
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import core
+import public_auth
 import db
 import nutri
 
@@ -20,7 +21,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 PREFIX = os.environ.get("URL_PREFIX", "/entreno").rstrip("/")
 PORTAL_URL = os.environ.get("PORTAL_URL", "https://portal.solde.cat").rstrip("/")
 AGENT_TOKEN = os.environ.get("AGENT_TOKEN", "").strip()
-SESSION_HOURS = float(os.environ.get("SESSION_HOURS", "12"))
+SESSION_HOURS = float(os.environ.get("SESSION_HOURS", "168"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSET_V = str(int(time.time()))
 SMALL_BODY = 256 * 1024
@@ -74,7 +75,7 @@ def _secret_key():
 
 app.config.update(
     SECRET_KEY=_secret_key(),
-    SESSION_COOKIE_NAME="homelab_session",
+    SESSION_COOKIE_NAME="solde_session",
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "1") == "1",
@@ -105,7 +106,8 @@ def _logged():
 
 
 def _to_login():
-    return redirect("/login?next=" + quote(request.script_root + "/", safe="/"))
+    nxt = request.script_root + (request.full_path.rstrip("?") if request.method == "GET" and not request.path.startswith("/static") else "/")
+    return redirect(request.script_root + "/login?next=" + quote(nxt, safe="/"))
 
 
 def _is_media_upload(path):
@@ -115,10 +117,10 @@ def _is_media_upload(path):
 @app.before_request
 def gate():
     path = request.path
-    if path == "/healthz":
+    if path in ("/healthz", "/login"):
         return None
     if path.startswith("/agent/"):
-        if request.script_root:
+        if request.script_root or not public_auth.agent_ip_ok():
             abort(404)
         tok = request.headers.get("X-Agent-Token", "")
         if not AGENT_TOKEN or not hmac.compare_digest(tok, AGENT_TOKEN):
@@ -166,13 +168,29 @@ def headers(resp):
 # ---------------------------------------------------------------- paginas y utilidades
 
 _i18n = {}
+# Un mismo pod sirve dos sitios segun el dominio (SITE_MODES="entreno.solde.cat=entreno,nutricion.solde.cat=nutricion"): cada uno muestra solo sus vistas.
+# Cualquier otro Host (ClusterIP, pruebas) muestra todo. Es solo presentacion: la autenticacion no depende del dominio.
+SITE_MODES = dict(x.split("=", 1) for x in os.environ.get("SITE_MODES", "").split(",") if "=" in x)
+VIEW_ICON = {"dashboard": "pulse", "routines": "checks", "train": "barbell", "exercises": "search", "menu": "fork-knife", "foods": "book", "cook": "pot", "shopping": "cart", "chat": "chat", "settings": "gear"}
+MODE_VIEWS = {"entreno": ["dashboard", "routines", "train", "exercises", "chat", "settings"], "nutricion": ["menu", "foods", "cook", "shopping", "chat", "settings"], "all": list(VIEW_ICON)}
+MODE_BRAND = {"entreno": ("Entrenamiento", "Rutinas y progreso", "barbell"), "nutricion": ("Nutrición", "Menú, recetas y compra", "fork-knife"), "all": ("Entrenamiento", "Rutinas y progreso", "barbell")}
+
+
+def site_mode():
+    host = (request.headers.get("X-Forwarded-Host") or request.host or "").split(":")[0].lower()
+    return SITE_MODES.get(host, "all")
+
+
+public_auth.install(app, lambda: MODE_BRAND[site_mode()][0], SESSION_HOURS)
 
 
 def page(template, **kw):
     if not _i18n:
         with open(os.path.join(HERE, "static", "i18n", "es.json"), encoding="utf-8") as f:
             _i18n.update(json.load(f))
-    return render_template(template, lang="es", i18n=_i18n, v=ASSET_V, base=request.script_root, embed=request.args.get("embed") == "1", **kw)
+    mode = site_mode()
+    return render_template(template, lang="es", i18n=_i18n, v=ASSET_V, base=request.script_root, embed=request.args.get("embed") == "1", mode=mode,
+                           views=[(v, VIEW_ICON[v]) for v in MODE_VIEWS[mode]], brand=MODE_BRAND[mode], **kw)
 
 
 @app.route("/")

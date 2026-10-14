@@ -19,7 +19,9 @@ import * as settings from "./views/settings.js";
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const VIEWS = { dashboard, routines, train, exercises, menu, foods, cook, shopping, chat, settings };
-const ORDER = ["dashboard", "routines", "train", "exercises", "menu", "foods", "cook", "shopping", "chat", "settings"];
+const MODE = (document.querySelector('meta[name="mode"]') || {}).content || "all";
+const MODES = { entreno: ["dashboard", "routines", "train", "exercises", "chat", "settings"], nutricion: ["menu", "foods", "cook", "shopping", "chat", "settings"], all: ["dashboard", "routines", "train", "exercises", "menu", "foods", "cook", "shopping", "chat", "settings"] };
+const ORDER = MODES[MODE] || MODES.all;
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 const MOD = isMac ? "⌘" : "Ctrl+";
 let current = null, live = null, liveTimer = null;
@@ -29,7 +31,7 @@ function closeDrawer() { $("#sidebar").classList.remove("open"); $("#scrim").hid
 
 function route() {
   const m = location.hash.match(/^#\/(\w+)/);
-  const id = m && VIEWS[m[1]] ? m[1] : "dashboard";
+  const id = m && VIEWS[m[1]] && ORDER.includes(m[1]) ? m[1] : ORDER[0];
   $$(".view").forEach((v) => (v.hidden = v.dataset.view !== id));
   $$("[data-nav]").forEach((a) => (a.dataset.nav === id ? a.setAttribute("aria-current", "true") : a.removeAttribute("aria-current")));
   document.body.dataset.view = id;
@@ -57,6 +59,7 @@ async function logout() { try { await post("/api/logout"); } catch (e) { /* igno
 async function refreshLive() { try { live = await get("/api/sessions/active"); } catch (e) { /* ignorar */ } syncLive(); }
 function syncLive() {
   const b = $("#live-banner");
+  if (!b) return;
   const show = !!live && current !== "train";
   b.hidden = !show;
   clearInterval(liveTimer);
@@ -69,9 +72,9 @@ function buildCommands() {
   const g = (k) => t(`palette.g_${k}`);
   const icons = { dashboard: "pulse", routines: "checks", train: "barbell", exercises: "search", menu: "fork-knife", foods: "book", cook: "pot", shopping: "cart", chat: "chat", settings: "gear" };
   const cmds = ORDER.map((id, i) => ({ group: g("go"), label: t(`nav.${id === "menu" ? "menu_food" : id}`), icon: icons[id], hint: String(i + 1), run: () => goTo(id), keywords: "ir go" }));
-  cmds.push({ group: g("actions"), label: "Ir al menú de hoy", icon: "fork-knife", run: () => goTo("menu") });
-  cmds.push({ group: g("actions"), label: "Empezar un entrenamiento", icon: "play", run: () => goTo("train") });
-  cmds.push({ group: g("actions"), label: "Nueva rutina", icon: "plus", run: () => { goTo("routines"); setTimeout(() => $('[data-act="new"]')?.click(), 300); } });
+  if (ORDER.includes("menu")) cmds.push({ group: g("actions"), label: "Ir al menú de hoy", icon: "fork-knife", run: () => goTo("menu") });
+  if (ORDER.includes("train")) cmds.push({ group: g("actions"), label: "Empezar un entrenamiento", icon: "play", run: () => goTo("train") });
+  if (ORDER.includes("routines")) cmds.push({ group: g("actions"), label: "Nueva rutina", icon: "plus", run: () => { goTo("routines"); setTimeout(() => $('[data-act="new"]')?.click(), 300); } });
   cmds.push({ group: g("actions"), label: "Nueva conversación con el asistente", icon: "chat", run: () => { goTo("chat"); setTimeout(() => $("#ch-new")?.click(), 250); } });
   ["auto", "light", "dark"].forEach((m) => cmds.push({ group: g("appearance"), label: t(`theme.${m}`), icon: { auto: "auto", light: "sun", dark: "moon" }[m], run: () => setTheme(m), keywords: "tema theme" }));
   cmds.push({ group: g("appearance"), label: t("density.toggle"), icon: "density", hint: "D", run: toggleDensity });
@@ -115,12 +118,11 @@ async function boot() {
   initShortcuts();
   onOffline((off) => ($("#banner-offline").hidden = !off));
   await session();
-  Object.values(VIEWS).forEach((v) => v.init());
+  ORDER.forEach((id) => VIEWS[id].init());
   window.addEventListener("hashchange", route);
-  window.addEventListener("training:session", refreshLive);
-  await refreshLive();
+  if (ORDER.includes("train")) { window.addEventListener("training:session", refreshLive); await refreshLive(); }
   route();
-  setInterval(() => { if (!document.hidden) refreshLive(); }, 60000);
+  if (ORDER.includes("train")) setInterval(() => { if (!document.hidden) refreshLive(); }, 60000);
 }
 
 boot().catch((e) => console.error(e));
