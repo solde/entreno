@@ -1,11 +1,11 @@
-# homelab-training — Entrenamiento y Nutrición (portal.solde.cat/entreno)
+# homelab-training — Entrenamiento y Nutrición (entreno.solde.cat / nutricion.solde.cat, públicos con login)
 
 Sección **Entrenamiento** del portal de administración: gestión de rutinas, base de ejercicios con imágenes/vídeos, entrenamiento guiado con
 cronómetros de ejercicio y descanso, panel de progreso, asistente de IA con acceso a los datos (lee y edita rutinas, y puede evaluar el
 desempeño y ajustar las rutinas automáticamente) y copia de seguridad (exportar/importar).
 
 ```
-navegador ──► portal.solde.cat/entreno (Flask + SQLite, ns training; sesión y cookie del portal)
+navegador ──► entreno.solde.cat / nutricion.solde.cat (Traefik público → Flask + SQLite, ns training; login `auth`, cookie `solde_session`)
                   ▲  pull (X-Agent-Token, solo por ClusterIP)
         training-agent.service (host) ── claude -p SIN herramientas propias + MCP "training" (lee datos / edita rutinas con historial)
 ```
@@ -82,7 +82,7 @@ Después commitea el cambio de tag en `homelab-infra`.
 | `host-agent/install.sh`, `set-token.sh` | Instalación del servicio y token compartido |
 | `tests/` | pytest (`pytest -q tests --ignore=tests/ui_smoke.py`) y prueba de interfaz con Playwright (`tests/ui_smoke.py <carpeta>`) |
 
-Variables de la app: `DB_PATH`, `MEDIA_DIR`, `URL_PREFIX` (/entreno), `SECRET_KEY`, `AGENT_TOKEN`, `COOKIE_SECURE`, `TRAINING_TZ` (Europe/Madrid). Del worker (`/etc/training-agent/env`):
+Variables de la app: `DB_PATH`, `MEDIA_DIR`, `URL_PREFIX` (vacío), `SECRET_KEY`, `AGENT_TOKEN`, `COOKIE_SECURE`, `TRAINING_TZ` (Europe/Madrid). Del worker (`/etc/training-agent/env`):
 `TRAINING_URL`, `TRAINING_MODEL`, `TRAINING_EFFORT`, `TRAINING_TURN_TIMEOUT`, `TRAINING_EVAL_TIMEOUT`, `TRAINING_MAX_BUDGET_USD`.
 
 ## Límites conocidos
