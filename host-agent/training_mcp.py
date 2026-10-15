@@ -94,6 +94,35 @@ def t_profile_get(a):
 
 # ---------------------------------------------------------------- escritura (rutinas)
 
+
+def t_session_update(a):
+    sid = _int(a.get("id"), 0, 0, 10**9)
+    before = call("GET", "/agent/sessions/%d" % sid)
+    out = {"reason": str(a.get("reason") or "")[:300]}
+    if len(out["reason"]) < 8:
+        raise ValueError("reason (≥ 8 caracteres) es obligatorio")
+    body = {k: a[k] for k in ("notes", "rating") if k in a}
+    if body:
+        call("PATCH", "/agent/sessions/%d" % sid, body=body)
+        out["session_before"] = {k: before.get(k) for k in body}
+    changes = []
+    for ch in a.get("sets") or []:
+        if ch.get("delete"):
+            old = next((x for x in before.get("sets", []) if x["id"] == ch.get("id")), None)
+            call("DELETE", "/agent/sessions/%d/sets/%d" % (sid, _int(ch.get("id"), 0, 0, 10**9)))
+            changes.append({"deleted": old})
+            continue
+        f = {k: ch[k] for k in ("reps", "weight", "duration_s", "distance_m", "rpe", "rest_s") if k in ch}
+        if ch.get("id"):
+            old = next((x for x in before.get("sets", []) if x["id"] == ch["id"]), None)
+            call("PATCH", "/agent/sessions/%d/sets/%d" % (sid, _int(ch["id"], 0, 0, 10**9)), body=f)
+            changes.append({"updated": ch["id"], "before": {k: (old or {}).get(k) for k in f}})
+        else:
+            r = call("POST", "/agent/sessions/%d/sets" % sid, body=dict(f, exercise_id=ch.get("exercise_id"), position=ch.get("position", 0)))
+            changes.append({"added": r.get("id")})
+    out["sets"] = changes
+    return j(out)
+
 ITEM_KEYS = ("exercise_id", "sets", "reps_min", "reps_max", "weight", "duration_s", "distance_m", "rest_s", "rest_ex_s", "notes")
 
 
@@ -255,6 +284,7 @@ TOOLS = {
     "plan_clear": (t_plan_clear, {"description": "Vacía un rango de días del menú. Pídelo solo si la persona lo ha pedido. Recuperable desde el historial.", "inputSchema": S(**{"from": STR, "to": STR, "reason": STR})}),
     "plan_log": (t_plan_log, {"description": "Historial de cambios del menú (id, fecha, quién, motivo, rango).", "inputSchema": S(limit=INT)}),
     "plan_restore": (t_plan_restore, {"description": "Deshace un cambio del historial (log_id de plan_log).", "inputSchema": S(log_id=INT)}),
+    "session_update": (t_session_update, {"description": "Corrige un entrenamiento YA registrado (terminado). notes/rating de la sesión y en sets una lista de cambios: {id, reps, weight, duration_s, distance_m, rpe, rest_s} edita una serie (ids de session_get); {id, delete:true} la borra; {exercise_id, position, reps, weight…} añade una (position = índice del ejercicio en el plan). Úsalo solo si la persona lo pide; reason (≥ 8 caracteres) obligatorio. Devuelve los valores anteriores por si hay que revertir.", "inputSchema": S(id=INT, notes=STR, rating=INT, reason=STR, sets={"type": "array", "items": {"type": "object"}})}),
     "routine_create": (t_routine_create, {"description": "Crea una rutina nueva. Usa ids reales de exercise_search. Indica el motivo en reason.", "inputSchema": S(name=STR, notes=STR, weekdays={"type": "array", "items": INT, "description": "1=lunes … 7=domingo"}, items=ITEMS, reason=STR)}),
     "routine_update": (t_routine_update, {"description": "Edita una rutina. Para cambiar ejercicios/series/pesos envía la lista COMPLETA en items (con los cambios). reason (obligatorio, ≥ 8 caracteres) explica el cambio a la persona. La versión anterior se guarda y se puede restaurar.", "inputSchema": S(id=INT, name=STR, notes=STR, weekdays={"type": "array", "items": INT}, items=ITEMS, reason=STR)}),
     "routine_restore": (t_routine_restore, {"description": "Restaura una versión anterior de la rutina (revision_id sale de routine_get).", "inputSchema": S(id=INT, revision_id=INT)}),

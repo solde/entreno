@@ -38,7 +38,7 @@ READ_TOOLS = ("exercise_search", "exercise_get", "routine_list", "routine_get", 
 WRITE_TOOLS = ("routine_create", "routine_update", "routine_restore", "routine_archive", "exercise_create",
                "food_create", "recipe_save", "plan_set_days", "plan_add_entry", "plan_clear", "plan_restore")
 READ_TOOLS += ("nutrition_profile", "food_search", "recipe_list", "recipe_get", "plan_get", "plan_log")
-WRITE_TOOLS += ("cook_ideas_set",)
+WRITE_TOOLS += ("cook_ideas_set", "session_update")
 ALLOWED = [MCP_PREFIX + t for t in READ_TOOLS + WRITE_TOOLS]
 SETTINGS = json.dumps({"permissions": {"allow": ALLOWED}})
 

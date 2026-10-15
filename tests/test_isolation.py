@@ -159,3 +159,22 @@ def test_legacy_database_goes_only_to_its_owner(tmp_path, monkeypatch):
     chk = sqlite3.connect(db.path_of("dueno"))
     assert chk.execute("SELECT COUNT(*) FROM routines WHERE name='Rutina de antes'").fetchone()[0] == 1
     assert owner.get("/api/routines").get_json()[0]["name"] == "Rutina de antes" and other.get("/api/routines").get_json() == []
+
+
+def test_agent_can_correct_registered_workout(duo):
+    a, b, mod = duo
+    c = mod.app.test_client()
+    bench = first_ex(a, "barbell bench press")
+    sid = a.post("/api/sessions", json={}).get_json()["id"]
+    sset = a.post("/api/sessions/%d/sets" % sid, json={"exercise_id": bench, "position": 0, "reps": 8, "weight": 50}).get_json()
+    a.post("/api/sessions/%d/finish" % sid, json={})
+    H = agent("alicia")
+    r = c.patch("/agent/sessions/%d/sets/%d" % (sid, sset["id"]), headers=H, json={"reps": 10, "weight": 55})
+    assert r.status_code == 200 and r.get_json()["reps"] == 10
+    n = c.post("/agent/sessions/%d/sets" % sid, headers=H, json={"exercise_id": bench, "position": 0, "reps": 6, "weight": 60}).get_json()
+    assert n["set_no"] == 2
+    assert c.patch("/agent/sessions/%d" % sid, headers=H, json={"notes": "ok", "rating": 4}).get_json()["rating"] == 4
+    assert c.delete("/agent/sessions/%d/sets/%d" % (sid, n["id"]), headers=H).status_code == 200
+    b.get("/api/meta")
+    # otra persona no ve ni toca esa sesión
+    assert c.patch("/agent/sessions/%d/sets/%d" % (sid, sset["id"]), headers=agent("benito"), json={"reps": 1}).status_code == 404

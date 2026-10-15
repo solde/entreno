@@ -797,6 +797,29 @@ def agent_session(sid):
     return jsonify(s)
 
 
+@app.route("/agent/sessions/<int:sid>", methods=["PATCH"])
+def agent_session_patch(sid):
+    found(db.one("SELECT 1 AS x FROM sessions WHERE id=?", (sid,)), "entrenamiento")
+    d = {k: v for k, v in body().items() if k in ("notes", "rating")}
+    s = core.patch_session(sid, d)
+    s.pop("state", None)
+    return jsonify(s)
+
+
+@app.route("/agent/sessions/<int:sid>/sets", methods=["POST"])
+def agent_set_add(sid):
+    return jsonify(core.add_set(sid, body(), any_status=True)), 201
+
+
+@app.route("/agent/sessions/<int:sid>/sets/<int:set_id>", methods=["PATCH", "DELETE"])
+def agent_set_item(sid, set_id):
+    found(db.one("SELECT 1 AS x FROM session_sets WHERE id=? AND session_id=?", (set_id, sid)), "serie")
+    if request.method == "DELETE":
+        db.run("DELETE FROM session_sets WHERE id=? AND session_id=?", (set_id, sid))
+        return jsonify({"ok": True})
+    return jsonify(core.update_set(sid, set_id, body()))
+
+
 @app.route("/agent/stats")
 def agent_stats():
     st = core.stats(request.args.get("weeks", 8, type=int))

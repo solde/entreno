@@ -448,8 +448,11 @@ def _check_session_active(sid):
         raise TrainError("el entrenamiento ya terminó")
 
 
-def add_set(sid, d):
-    _check_session_active(sid)
+def add_set(sid, d, any_status=False):
+    if not any_status:
+        _check_session_active(sid)
+    elif not db.one("SELECT 1 AS x FROM sessions WHERE id=?", (sid,)):
+        raise TrainError("entrenamiento no encontrado")
     eid = str(d.get("exercise_id") or "")
     if not db.one("SELECT 1 AS x FROM exercises WHERE id=?", (eid,)):
         raise TrainError("ejercicio no válido")

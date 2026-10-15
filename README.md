@@ -23,7 +23,7 @@ navegador ──► entreno.solde.cat / nutricion.solde.cat (Traefik público �
   registro de reps/peso/duración/distancia/RPE, plan editable al vuelo, «última vez», valoración y notas. El estado sobrevive a recargas y se ve un banner mientras hay un entrenamiento en curso.
 - **Panel**: sesiones, tiempo, volumen y cardio por semana (12 semanas), constancia frente al objetivo, racha, músculos trabajados, récords (1RM estimado), entrenamientos recientes y
   ajustes del asistente.
-- **Asistente** (chat) y **evaluación automática**: lee ejercicios, rutinas, entrenamientos, estadísticas y perfil, y crea/edita rutinas (cada edición guarda la versión anterior).
+- **Asistente** (chat) y **evaluación automática**: lee ejercicios, rutinas, entrenamientos, estadísticas y perfil, y crea/edita rutinas (cada edición guarda la versión anterior) y, si se lo pides, corrige entrenamientos ya registrados (`session_update`: notas, valoración, editar/borrar/añadir series; devuelve los valores anteriores).
   «Evaluar y ajustar con IA» (por rutina o global), o automático **después de cada entrenamiento** o **una vez por semana** (Ajustes). Progresión por doble criterio (reps/RPE), descansos,
   sustitución de ejercicios con molestias; estilo conservador/normal/agresivo.
 - **Ajustes**: perfil (objetivo, experiencia, días, material, lesiones), unidades, sonido/vibración/pantalla, ajuste automático, y **exportar/importar** (JSON completo, con o sin imágenes
