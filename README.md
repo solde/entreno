@@ -61,6 +61,16 @@ Cada usuario del login (`auth`, cookie `solde_session` con `user`) tiene **su pr
 - **Migración**: la base anterior a las cuentas (`/data/training.db` y `/data/media/*`) pasa, la primera vez que entra, al usuario de `LEGACY_OWNER` (manifest: `dsoldevila`); nadie más la ve. Una cookie sin `user` (anterior a las cuentas) pide volver a entrar.
 - Tras actualizar `host-agent/`: `sudo -E host-agent/install.sh` y reiniciar `training-agent`.
 
+## Casas (Nutrición compartida)
+
+Una **casa** es un espacio compartido de Nutrición: sus **alimentos propios, recetas, menú, compra y trabajos del asistente** viven en `/data/casas/<slug>.db` (mismo esquema que la base personal, sembrada con la biblioteca) y los ven todas las personas asignadas. Una persona puede estar en **una o varias casas** y elige cuál usa (botón de la barra superior, `static/js/casas.js`); sin casa activa trabaja con su menú personal de siempre.
+- **Lo personal no se comparte**: perfil y objetivos de macros (`nutri.targets()` y `/agent/nutrition/profile` leen siempre la base personal con `db.personal()`), entrenos, rutinas, chat y ajustes. El «Personas» del menú sigue siendo local del navegador (la primera vez se pone al número de personas de la casa).
+- **Registro** (`casas.py`, `/data/casas/_registro.db`): `casas`, `members(casa, user, role owner|member)` y `active(user → casa)`. Cualquier persona con sesión crea casas (queda como `owner`; opción de **copiar** su menú, recetas y alimentos propios actuales con `nutri.export_part/import_part`); quien administra asigna/quita personas (nombre de usuario válido; no hace falta que ya haya entrado), renombra y elimina; cualquiera puede salirse. La casa no se queda sin administración mientras haya más gente ni sin personas. **Eliminar** aparta la base en `/data/casas/_eliminadas/` (no se borra).
+- **Aislamiento**: `db.use_casa(slug)` (contextvar `_space`) hace que `db.q/one/run/tx` vayan a la base de la casa; lo activa el `before_request` del blueprint de nutrición (`casas.select_casa`) **solo si la persona es miembro**; el resto de rutas siguen en la base personal. Probado en `tests/test_casas.py` (compartir, varias casas, no miembros, solo administra quien es `owner`, trabajos, asistente) y `tests/ui_casas.py` (Playwright, escritorio y móvil).
+- **Asistente**: los trabajos de plan y Cocinar de una casa se encolan en la base de la casa con `requested_by`; `/agent/next` también recorre las casas y el trabajo trae `user` (quien lo pidió: de él salen los objetivos; si ya no es miembro, el trabajo falla) y `casa`. El worker manda `X-Agent-Casa` (y el MCP `TRAINING_CASA`); un trabajo de chat lleva la casa activa en ese momento. Sin cabecera, la casa activa de la persona; con una casa de la que no es miembro → 400. `nutrition_profile` devuelve `casa {name, members}` y los prompts piden respetar lo de las demás personas.
+- **Límites**: la exportación JSON completa (Ajustes) sigue siendo la personal (el CSV del menú sí es el de la casa activa); no hay roles más finos que administra/miembro; el chat del asistente es personal.
+- Tras actualizar: `deploy.sh vNN` (instala también el worker; cambió `worker.py`, `training_mcp.py` y los prompts).
+
 ## Seguridad
 
 - Sesión del portal (cookie `homelab_session`, misma `SECRET_KEY` copiada a `training-auth`), CSRF, mismo origen; `/agent/*` solo por ClusterIP y con token (404 bajo el prefijo).
@@ -85,6 +95,7 @@ Después commitea el cambio de tag en `homelab-infra`.
 | `app.py`, `core.py`, `db.py` | API Flask: ejercicios y medios, rutinas con versiones, entrenamientos, estadísticas, exportar/importar, chat y API del agente |
 | `data/exercises.json`, `static/ex/` | Base de ejercicios (generada por `tools/build_exercises.py`; las imágenes no van a git) |
 | `static/`, `templates/` | Frontend (Liquid Glass): panel, rutinas, entrenar, ejercicios, asistente, ajustes |
+| `casas.py`, `static/js/casas.js` | Casas: registro de casas/miembros/casa activa, API y gestor de la barra superior |
 | `nutri.py`, `data/foods.json` | Nutrición: alimentos, recetas, menú por días, compra, historial, trabajos del asistente, exportar/importar |
 | `host-agent/worker.py`, `training_mcp.py`, `prompt/` | Worker (chat, evaluaciones y planes de comidas), servidor MCP y prompts (`system_prompt.md`, `eval_prompt.md`, `plan_prompt.md`, `cook_prompt.md`) |
 | `host-agent/install.sh`, `set-token.sh` | Instalación del servicio y token compartido |

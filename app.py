@@ -14,6 +14,7 @@ import core
 import public_auth
 import db
 import nutri
+import casas
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -82,8 +83,10 @@ app.config.update(
     PERMANENT_SESSION_LIFETIME=int(SESSION_HOURS * 3600),
     MAX_CONTENT_LENGTH=IMPORT_MAX + 1024 * 1024,
 )
-db.HOOKS.extend([core.seed, nutri.seed_foods, nutri.seed_recipes])      # semillas de cada base personal (ver db.use)
+db.HOOKS.extend([core.seed, nutri.seed_foods, nutri.seed_recipes])
+db.CASA_HOOKS.extend([nutri.seed_foods, nutri.seed_recipes])      # la base compartida de una casa solo lleva nutricion      # semillas de cada base personal (ver db.use)
 app.register_blueprint(nutri.bp)
+app.register_blueprint(casas.bp)
 
 # ---------------------------------------------------------------- seguridad (sesion compartida con el portal)
 
@@ -629,6 +632,11 @@ def agent_next():
             job = _next_job(who)
             if job:
                 break
+        if not job:
+            for slug in casas.all_slugs():                     # trabajos de nutricion de las casas (menu compartido): los hace el asistente en nombre de quien los pidio
+                job = _next_casa_job(slug)
+                if job:
+                    break
         if job:
             return jsonify(job)
         if time.time() >= end:
@@ -651,7 +659,8 @@ def _next_job(who):
             if t:
                 c.execute("UPDATE chat_turns SET status='running', started=? WHERE id=?", (db.now(), t["id"]))
                 resume = c.execute("SELECT 1 FROM chat_turns WHERE session_id=? AND status='done' AND id<?", (t["session_id"], t["id"])).fetchone() is not None
-                job = {"kind": "chat", "turn_id": t["id"], "session_id": t["session_id"], "claude_session_uuid": t["claude_uuid"], "resume": resume, "user_message": t["user_message"]}
+                job = {"kind": "chat", "turn_id": t["id"], "session_id": t["session_id"], "claude_session_uuid": t["claude_uuid"], "resume": resume, "user_message": t["user_message"],
+                       "casa": casas.active(who)}      # la casa en que estaba la persona al preguntar: sus herramientas de nutricion trabajan ahi
             else:
                 e = c.execute("SELECT e.id, e.routine_id, e.trigger, r.name FROM eval_jobs e LEFT JOIN routines r ON r.id=e.routine_id WHERE e.status='queued' ORDER BY e.id LIMIT 1").fetchone()
                 if e:
@@ -669,6 +678,33 @@ def _next_job(who):
                             job = {"kind": "cook", "job_id": k["id"], "date": k["date"], "instructions": k["instructions"]}
         if job:
             job["user"] = who
+        return job
+    finally:
+        db.use(None)
+
+
+def _next_casa_job(slug):
+    """Primer plan/Cocinar en cola en la base de la casa `slug`; el trabajo lleva a quien lo pidio (`user`, de quien salen los objetivos) y la casa."""
+    db.use(None)
+    db.use_casa(slug)
+    try:
+        nutri.fail_stale_jobs()
+        nutri.fail_stale_cook()
+        job = None
+        with db.tx() as c:
+            p = c.execute("SELECT id, date_from, date_to, instructions, requested_by FROM plan_jobs WHERE status='queued' ORDER BY id LIMIT 1").fetchone()
+            k = None if p else c.execute("SELECT id, date, instructions, requested_by FROM cook_jobs WHERE status='queued' ORDER BY id LIMIT 1").fetchone()
+            j = p or k
+            if j:
+                who = j["requested_by"]
+                table = "plan_jobs" if p else "cook_jobs"
+                if who not in db.users() or not casas.role_of(slug, who):      # quien lo pidio ya no esta en la casa: no se hace en su nombre
+                    c.execute("UPDATE %s SET status='error', error='La persona que lo pidió ya no pertenece a la casa', finished=? WHERE id=?" % table, (db.now(), j["id"]))
+                else:
+                    c.execute("UPDATE %s SET status='running', started=? WHERE id=?" % table, (db.now(), j["id"]))
+                    job = ({"kind": "nplan", "job_id": p["id"], "date_from": p["date_from"], "date_to": p["date_to"], "instructions": p["instructions"]} if p
+                           else {"kind": "cook", "job_id": k["id"], "date": k["date"], "instructions": k["instructions"]})
+                    job.update(user=who, casa=slug)
         return job
     finally:
         db.use(None)

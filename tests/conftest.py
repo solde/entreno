@@ -19,7 +19,7 @@ def mod(tmp_path, monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "x" * 32)
     monkeypatch.setenv("URL_PREFIX", "/entreno")
     monkeypatch.setenv("AGENT_IPS", "127.0.0.1")
-    for m in ("db", "core", "nutri", "public_auth", "app"):
+    for m in ("db", "core", "nutri", "casas", "public_auth", "app"):
         sys.modules.pop(m, None)
     app = importlib.import_module("app")
     app.app.testing = True

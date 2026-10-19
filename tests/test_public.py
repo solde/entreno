@@ -27,7 +27,7 @@ def pub(tmp_path, monkeypatch):
     for k, v in dict(DB_PATH=str(tmp_path / "t.db"), MEDIA_DIR=str(tmp_path / "media"), AGENT_TOKEN="tok", COOKIE_SECURE="0", SECRET_KEY="x" * 32, URL_PREFIX="", AGENT_IPS="127.0.0.1",
                      AUTH_URL="http://127.0.0.1:%d" % s.server_port, AUTH_TOKEN="tok", SITE_MODES="entreno.solde.cat=entreno,nutricion.solde.cat=nutricion").items():
         monkeypatch.setenv(k, v)
-    for m in ("db", "core", "nutri", "public_auth", "app"):
+    for m in ("db", "core", "nutri", "casas", "public_auth", "app"):
         sys.modules.pop(m, None)
     app = importlib.import_module("app")
     app.app.testing = True

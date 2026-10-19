@@ -129,7 +129,7 @@ def test_legacy_database_goes_only_to_its_owner(tmp_path, monkeypatch):
     monkeypatch.setenv("LEGACY_OWNER", "dueno")
     for k, v in dict(AGENT_TOKEN="tok", COOKIE_SECURE="0", SECRET_KEY="x" * 32, URL_PREFIX="/entreno", AGENT_IPS="127.0.0.1").items():
         monkeypatch.setenv(k, v)
-    for m in ("db", "core", "nutri", "public_auth", "app"):
+    for m in ("db", "core", "nutri", "casas", "public_auth", "app"):
         sys.modules.pop(m, None)
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     # base antigua con un dato reconocible y una imagen propia
@@ -142,7 +142,7 @@ def test_legacy_database_goes_only_to_its_owner(tmp_path, monkeypatch):
     c.close()
     os.makedirs(tmp_path / "media" / "ex1")
     (tmp_path / "media" / "ex1" / "a.png").write_bytes(PNG)
-    for m in ("db", "core", "nutri", "public_auth", "app"):
+    for m in ("db", "core", "nutri", "casas", "public_auth", "app"):
         sys.modules.pop(m, None)
     mod = importlib.import_module("app")
     mod.app.testing = True

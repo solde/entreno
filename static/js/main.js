@@ -15,6 +15,7 @@ import * as shopping from "./views/shopping.js";
 import * as cook from "./views/cook.js";
 import * as chat from "./views/chat.js";
 import * as settings from "./views/settings.js";
+import { init as initCasas } from "./casas.js";
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -118,6 +119,7 @@ async function boot() {
   initShortcuts();
   onOffline((off) => ($("#banner-offline").hidden = !off));
   await session();
+  await initCasas();                       // antes de pintar las vistas: la casa activa y el numero de personas
   ORDER.forEach((id) => VIEWS[id].init());
   window.addEventListener("hashchange", route);
   if (ORDER.includes("train")) { window.addEventListener("training:session", refreshLive); await refreshLive(); }

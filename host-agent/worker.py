@@ -54,7 +54,7 @@ def token():
         return f.read().strip()
 
 
-WHO = {"user": None}      # persona dueña del trabajo en curso: todas las llamadas a la app y al MCP van en su nombre (X-Agent-User)
+WHO = {"user": None, "casa": None}      # persona dueña del trabajo en curso (todas las llamadas a la app y al MCP van en su nombre: X-Agent-User) y casa en que trabaja (X-Agent-Casa)
 
 
 def api(method, path, body=None, timeout=15):
@@ -62,6 +62,8 @@ def api(method, path, body=None, timeout=15):
     hdr = {"X-Agent-Token": token(), "Content-Type": "application/json"}
     if WHO["user"]:
         hdr["X-Agent-User"] = WHO["user"]
+    if WHO["casa"]:
+        hdr["X-Agent-Casa"] = WHO["casa"]
     req = urllib.request.Request(BASE + path, data=data, method=method, headers=hdr)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         raw = r.read()
@@ -213,7 +215,7 @@ class Streamer:
 
 
 def run_claude(user_message, system_prompt, session_uuid, resume, streamer, timeout, budget, debug_file):
-    env = {"TRAINING_URL": BASE, "TRAINING_TOKEN": token(), "TRAINING_USER": WHO["user"] or ""}
+    env = {"TRAINING_URL": BASE, "TRAINING_TOKEN": token(), "TRAINING_USER": WHO["user"] or "", "TRAINING_CASA": WHO["casa"] or ""}
     mcp_cfg = {"mcpServers": {"training": {"command": sys.executable, "args": [os.path.join(HERE, "training_mcp.py")], "env": env}}}
     fd, mcp_path = tempfile.mkstemp(prefix="mcp-", suffix=".json", dir=RUN_DIR)  # 0600
     with os.fdopen(fd, "w") as f:
@@ -370,11 +372,11 @@ def main():
             status, job = api("GET", "/agent/next?wait=%d" % POLL_WAIT, timeout=POLL_WAIT + 15)
             backoff = 2
             if status == 200 and job:
-                WHO["user"] = job.get("user")
+                WHO["user"], WHO["casa"] = job.get("user"), job.get("casa")
                 try:
                     {"eval": process_eval, "nplan": process_nplan, "cook": process_cook}.get(job.get("kind"), process_chat)(job)
                 finally:
-                    WHO["user"] = None
+                    WHO["user"] = WHO["casa"] = None
         except urllib.error.HTTPError as e:
             log("app respondió %d, reintento en %ds" % (e.code, backoff))
             time.sleep(backoff)

@@ -139,6 +139,17 @@ select.inp { appearance: none; padding-right: 30px; background-image: linear-gra
 .news-overview h3 { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .news-overview .ic { color: var(--accent); }
 
+/* ---------- casas (Nutricion) ---------- */
+.casa-btn { flex: 0 1 auto; max-width: 220px; gap: 6px; } .casa-btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .casa-btn.on { background: var(--accent-soft); color: var(--accent); }
+.casa-dlg { max-height: calc(100dvh - 24px); overflow-y: auto; } .casa-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.casa { padding: 12px 14px; border-radius: 14px; background: var(--fill); display: flex; flex-direction: column; gap: 8px; } .casa.on { outline: 2px solid var(--accent); }
+.casa-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .casa-head .grow { flex: 1; }
+.casa-people { display: flex; flex-wrap: wrap; gap: 6px; } .casa-people .chip { align-items: center; gap: 4px; }
+.casa-x { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; padding: 0 2px; opacity: .6; } .casa-x:hover { opacity: 1; color: var(--bad); }
+.casa-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .casa-add .inp { flex: 1 1 160px; min-width: 0; }
+.casa-acts { display: flex; gap: 8px; flex-wrap: wrap; } .casa-new { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; } .casa-new h4 { font-size: .95rem; }
+@media (max-width: 640px) { .topbar:has(.casa-btn) .search-btn { display: none; } .casa-btn { flex: 1 1 0; min-width: 0; max-width: 220px; justify-content: flex-start; } .topbar:has(.casa-btn) .spacer { display: none; } }
+
 /* ---------- modo incrustado (iframe dentro del portal: ?embed=1) ---------- */
 html.embed, html.embed body { background: transparent; }
 html.embed .bg, html.embed .sidebar, html.embed .topbar, html.embed .tabbar, html.embed .skip { display: none !important; }

@@ -23,6 +23,7 @@
       <button class="icon-btn only-narrow" type="button" id="btn-sidebar" aria-label="{{ i18n['nav.menu'] }}">{{ ic('sidebar') }}</button>
       <button class="search-btn" type="button" id="btn-palette">{{ ic('search') }}<span>{{ i18n['palette.open'] }}</span><kbd id="kbd-hint">⌘K</kbd></button>
       <span class="spacer"></span>
+      {% if mode != 'entreno' %}<button class="btn sm casa-btn" type="button" id="casa-btn" aria-haspopup="dialog">{{ ic('home') }}<span>Mi menú</span></button>{% endif %}
       <div class="seg theme-seg" role="radiogroup" aria-label="{{ i18n['theme.label'] }}" id="theme-seg">
         <button type="button" role="radio" data-theme-pref="auto" aria-label="{{ i18n['theme.auto'] }}" title="{{ i18n['theme.auto'] }}">{{ ic('auto') }}</button>
         <button type="button" role="radio" data-theme-pref="light" aria-label="{{ i18n['theme.light'] }}" title="{{ i18n['theme.light'] }}">{{ ic('sun') }}</button>

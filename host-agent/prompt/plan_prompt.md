@@ -15,6 +15,7 @@ Indicaciones de la persona: {{INSTRUCTIONS}}
 # Procedimiento
 
 1. `nutrition_profile` y `plan_get` del rango. **No sobrescribas** los días que ya tienen entradas de la persona (`source: user`) salvo que las indicaciones lo pidan; planifica solo los días vacíos y dilo en el resumen. Si todos los días ya tienen menú y no se pide reemplazar, no hagas nada y explícalo.
+1b. Si el perfil trae `casa`, el menú es **compartido por las personas de esa casa** (`casa.members`): los objetivos (kcal y macros) son los de quien lo pide, así que planifica pensando en esa persona y en raciones que se puedan escalar para el resto; no cambies lo que otras personas de la casa ya hayan puesto.
 2. Si hay que decidir cuándo entrena, mira `routine_list` (días de cada rutina) y `sessions_list`: más hidratos en días de entreno intenso.
 3. Calcula el objetivo diario: usa `n_kcal`/proteína/hidratos/grasa si existen; si no, estima con Mifflin-St Jeor × actividad ajustada al objetivo corporal y **dilo en el resumen** (es orientativo).
 4. Busca los alimentos con `food_search` (nombre en español; ids reales) y usa recetas guardadas si encajan (`recipe_list`). Si falta un alimento imprescindible, créalo con `food_create` con valores por 100 g conocidos. Cantidades en gramos (recetas en raciones). Respeta dieta, alergias/intolerancias y alimentos que no le gustan; varía entre días, usa alimentos de temporada habituales y platos sencillos.

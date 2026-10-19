@@ -15,13 +15,14 @@ import urllib.request
 APP = os.environ.get("TRAINING_URL", "").rstrip("/")
 TOKEN = os.environ.get("TRAINING_TOKEN", "")
 USER = os.environ.get("TRAINING_USER", "")      # persona en cuyo nombre trabaja este asistente: la app solo le da SUS datos
+CASA = os.environ.get("TRAINING_CASA", "")      # casa en que trabaja este asistente (menu compartido); vacio = la casa activa de la persona
 MAX_TEXT = 40000
 
 
 def call(method, path, params=None, body=None):
     qs = ("?" + urllib.parse.urlencode({k: v for k, v in (params or {}).items() if v not in (None, "")})) if params else ""
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(APP + path + qs, data=data, method=method, headers={"X-Agent-Token": TOKEN, "X-Agent-User": USER, "Content-Type": "application/json"})
+    req = urllib.request.Request(APP + path + qs, data=data, method=method, headers={"X-Agent-Token": TOKEN, "X-Agent-User": USER, "X-Agent-Casa": CASA, "Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=40) as r:
             return json.loads(r.read() or b"null")

@@ -351,7 +351,8 @@ def save_recipe(d, rid=None):
 # ---------------------------------------------------------------- plan de comidas
 
 def targets():
-    s = core.get_settings()
+    with db.personal():                  # los objetivos de macros son de cada persona, aunque el menu sea de una casa
+        s = core.get_settings()
     out = {}
     for k, short in (("n_kcal", "kcal"), ("n_protein", "protein"), ("n_carbs", "carbs"), ("n_fat", "fat")):
         try:
@@ -585,7 +586,7 @@ def enqueue_plan(a, b, instructions):
     cur = db.one("SELECT id FROM plan_jobs WHERE status IN ('queued','running') AND date_from=? AND date_to=?", (d1.isoformat(), d2.isoformat()))
     if cur:
         return cur["id"]
-    return db.run("INSERT INTO plan_jobs(date_from,date_to,instructions,created) VALUES(?,?,?,?)", (d1.isoformat(), d2.isoformat(), ins, db.now())).lastrowid
+    return db.run("INSERT INTO plan_jobs(date_from,date_to,instructions,created,requested_by) VALUES(?,?,?,?,?)", (d1.isoformat(), d2.isoformat(), ins, db.now(), db.user() or "")).lastrowid
 
 
 def fail_stale_jobs():
@@ -698,7 +699,7 @@ def enqueue_cook(d, instructions):
         return cur["id"]
     if not day_foods(day)["items"] and not day_foods(day)["unspecified"]:
         raise TrainError("ese día no tiene menú: añade alimentos primero")
-    return db.run("INSERT INTO cook_jobs(date,instructions,created) VALUES(?,?,?)", (day, str(instructions or "").strip()[:1000], db.now())).lastrowid
+    return db.run("INSERT INTO cook_jobs(date,instructions,created,requested_by) VALUES(?,?,?,?)", (day, str(instructions or "").strip()[:1000], db.now(), db.user() or "")).lastrowid
 
 
 def fail_stale_cook():
@@ -958,9 +959,17 @@ def api_plan_csv():
 
 @bp.route("/agent/nutrition/profile")
 def agent_profile():
-    s = core.get_settings()
+    with db.personal():
+        s = core.get_settings()
     keep = ("units", "goal", "experience", "days_per_week", "equipment", "injuries", "notes", "n_kcal", "n_protein", "n_carbs", "n_fat", "n_diet", "n_allergies", "n_dislikes", "n_meals", "n_weight", "n_height", "n_age", "n_sex", "n_activity", "n_goal", "n_notes")
-    return jsonify({"settings": {k: s[k] for k in keep}, "targets": targets(), "slots": SLOTS, "today": date.today().isoformat()})
+    import casas
+    slug, user = db.casa(), db.user()
+    house = None
+    if slug:
+        c = next((x for x in casas.mine(user) if x["slug"] == slug), None)
+        if c:
+            house = {"name": c["name"], "members": [m["user"] for m in c["members"]]}
+    return jsonify({"settings": {k: s[k] for k in keep}, "targets": targets(), "slots": SLOTS, "today": date.today().isoformat(), "casa": house})
 
 
 @bp.route("/agent/season")

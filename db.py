@@ -118,7 +118,12 @@ LEGACY_OWNER = os.environ.get("LEGACY_OWNER", "")      # usuario que hereda la b
 USER_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,31}$")     # el mismo que valida `auth`; seguro como nombre de fichero
 HOOKS = []                                               # funciones sin argumentos que se ejecutan al crear la base de una persona (semillas)
 _user = contextvars.ContextVar("user", default=None)
+_space = contextvars.ContextVar("casa", default=None)     # casa activa de esta peticion (None = base personal)
 _ready = set()
+_ready_casas = set()
+CASAS_DIR = os.environ.get("CASAS_DIR", os.path.join(os.path.dirname(PATH) or ".", "casas"))
+CASA_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,30}$")
+CASA_HOOKS = []                                          # semillas de la base de una casa (alimentos y recetas de la biblioteca)
 _lock = threading.RLock()
 
 
@@ -128,6 +133,10 @@ class NoUser(RuntimeError):
 
 def user():
     return _user.get()
+
+
+def casa():
+    return _space.get()
 
 
 def valid_user(name):
@@ -146,6 +155,16 @@ def users():
         return sorted(f[:-3] for f in os.listdir(USERS_DIR) if f.endswith(".db") and valid_user(f[:-3]))
     except OSError:
         return []
+
+
+def valid_casa(slug):
+    return isinstance(slug, str) and bool(CASA_RE.match(slug))
+
+
+def casa_path(slug):
+    if not valid_casa(slug):
+        raise NoUser("casa no valida")
+    return os.path.join(CASAS_DIR, slug + ".db")
 
 
 def media_base():
@@ -179,9 +198,9 @@ def _adopt_legacy(name):
                 shutil.move(os.path.join(base, e), os.path.join(mine, e))
 
 
-def _open(name):
-    os.makedirs(USERS_DIR, exist_ok=True)
-    c = sqlite3.connect(path_of(name), timeout=15, isolation_level=None, check_same_thread=False)
+def _open(path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    c = sqlite3.connect(path, timeout=15, isolation_level=None, check_same_thread=False)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL")
     c.execute("PRAGMA foreign_keys=ON")
@@ -191,6 +210,7 @@ def _open(name):
 
 def use(name):
     """Activa la base de `name` para esta peticion/hilo (None = ninguna). Crea y siembra la base la primera vez."""
+    _space.set(None)
     if name is None:
         _user.set(None)
         return
@@ -211,16 +231,52 @@ def use(name):
             h()
 
 
+def use_casa(slug):
+    """Pasa a la base compartida de una casa (alimentos, recetas, menu y trabajos del asistente); lo personal (ajustes, entrenos, chat) sigue en la de la persona.
+    El permiso (que la persona sea miembro) lo comprueba quien llama (casas.py). La base se crea y siembra la primera vez."""
+    if slug is None:
+        _space.set(None)
+        return
+    if not valid_casa(slug):
+        raise NoUser("casa no valida")
+    _space.set(slug)
+    if slug in _ready_casas:
+        return
+    with _lock:
+        if slug in _ready_casas:
+            return
+        c = conn()
+        c.executescript(SCHEMA)
+        _migrate(c)
+        _ready_casas.add(slug)
+        for h in CASA_HOOKS:
+            h()
+
+
+class personal:
+    """with db.personal(): ... -> dentro del bloque, la base personal aunque haya una casa activa (ajustes, objetivos)."""
+    def __enter__(self):
+        self.prev = _space.get()
+        _space.set(None)
+        return self
+
+    def __exit__(self, *a):
+        _space.set(self.prev)
+        return False
+
+
 def conn():
+    slug = _space.get()
     name = _user.get()
-    if name is None:
+    if slug is None and name is None:
         raise NoUser("sin usuario activo")
+    key = "casa:" + slug if slug else name
     cache = getattr(_local, "c", None)
     if cache is None:
         cache = _local.c = {}
-    c = cache.get(name)
+    c = cache.get(key)
     if c is None:
-        c = cache[name] = _open(name)
+        c = cache[key] = _open(casa_path(slug) if slug else path_of(name))
     return c
 
 
@@ -229,6 +285,7 @@ COLUMNS = (
     ("foods", "months", "TEXT NOT NULL DEFAULT ''"), ("foods", "origin", "TEXT NOT NULL DEFAULT ''"),
     ("recipes", "months", "TEXT NOT NULL DEFAULT ''"), ("recipes", "origin", "TEXT NOT NULL DEFAULT ''"), ("recipes", "kind", "TEXT NOT NULL DEFAULT ''"),
     ("recipes", "minutes", "INTEGER"), ("recipes", "source", "TEXT NOT NULL DEFAULT 'user'"),
+    ("plan_jobs", "requested_by", "TEXT NOT NULL DEFAULT ''"), ("cook_jobs", "requested_by", "TEXT NOT NULL DEFAULT ''"),
 )
 
 
